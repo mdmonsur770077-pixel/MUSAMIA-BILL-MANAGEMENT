@@ -1,0 +1,8 @@
+{
+  "name": "Remix 3D লেবার কন্ট্রোল হাব",
+  "description": "মনসুর লেবার পোর্টাল - আর্কিটেকচারাল লেবার কন্ট্রোল হাব, বাৎসরিক ও মাসিক অডিট লেজার এবং রিয়েল-টাইম ব্যালেন্স হিসাব",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "entities": {
+    "Worker": {
+      "collection": "workers",
+      "fields": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "dailyWage": { "type": "number" },
+        "trade": { "type": "string" },
+        "phone": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    },
+    "WorkRecord": {
+      "collection": "records",
+      "fields": {
+        "id": { "type": "string" },
+        "workerId": { "type": "string" },
+        "date": { "type": "string" },
+        "days": { "type": "number" },
+        "paid": { "type": "number" },
+        "advance": { "type": "number" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string" }
+      }
+    }
+  }
+}
