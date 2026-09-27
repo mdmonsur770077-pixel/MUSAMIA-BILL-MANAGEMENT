@@ -1,18 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import YearlyMonthlyDashboard from './components/YearlyMonthlyDashboard';
 
-// ফায়ারবেস কনফিগারেশন
 const firebaseConfig = {
-  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
-  authDomain: "musamia-bill-management.firebaseapp.com",
-  projectId: "musamia-bill-management",
-  storageBucket: "musamia-bill-management.appspot.com",
-  messagingSenderId: "177984210561",
-  appId: "1:177984210561:web:671f93c0869ccdf9c0af80",
-  measurementId: "G-VWCY3P3C0"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "musamia-bill-management.firebaseapp.com",
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "musamia-bill-management",
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "musamia-bill-management.appspot.com",
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "177984210561",
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:177984210561:web:671f93c0869ccdf9c0af80"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -20,7 +18,7 @@ const auth = getAuth(app);
 export const db = getFirestore(app);
 
 export default function App() {
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -53,10 +51,13 @@ export default function App() {
   };
 
   if (loading) {
-    return <div className="min-h-screen bg-[#050814] text-white flex items-center justify-center">লোড হচ্ছে...</div>;
+    return (
+      <div className="min-h-screen bg-[#050814] text-white flex items-center justify-center">
+        লোড হচ্ছে...
+      </div>
+    );
   }
 
-  // যদি ইউজার লগইন করা না থাকে, তবে লগইন পেজ দেখাবে
   if (!user) {
     return (
       <div className="min-h-screen bg-[#050814] text-[#e6f1ff] flex items-center justify-center p-4">
@@ -98,7 +99,6 @@ export default function App() {
     );
   }
 
-  // ইউজার লগইন করা থাকলে মূল ড্যাশবোর্ড এবং ওপরে লগআউট বাটন দেখাবে
   return (
     <div className="min-h-screen bg-[#050814] text-[#e6f1ff]">
       <div className="flex justify-end p-4 bg-[#0b1329] border-b border-slate-800">
