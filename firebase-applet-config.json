@@ -1,12 +1,9 @@
 {
-  "projectId": "gen-lang-client-0926432468",
-  "appId": "1:1067900867389:web:e4abf923fed2561c9c2b54",
-  "apiKey": "AIzaSyBXoS92O26kp0ouxFV1nIWJufH1lrAK_Wk",
-  "authDomain": "gen-lang-client-0926432468.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-remix3d-9b6d202e-fcd8-48b6-b5d0-83581068a596",
-  "storageBucket": "gen-lang-client-0926432468.firebasestorage.app",
-  "messagingSenderId": "1067900867389",
-  "measurementId": "",
-  "oAuthClientId": "1067900867389-934m5p7j87hp5eaq610hgng4ld8u61hd.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
+  "authDomain": "musamia-bill-management.firebaseapp.com",
+  "projectId": "musamia-bill-management",
+  "storageBucket": "musamia-bill-management.firebasestorage.app",
+  "messagingSenderId": "177984210561",
+  "appId": "1:177984210561:web:671f93c0869ccdf9c0af80",
+  "measurementId": "G-VWCYBZP3C0"
 }
