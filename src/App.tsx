@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import YearlyMonthlyDashboard from './components/YearlyMonthlyDashboard';
 
-// ফায়ারবেস কনফিগারেশন (আপনার প্রজেক্টের তথ্য অনুযায়ী)
+// ফায়ারবেস কনফিগারেশন
 const firebaseConfig = {
-  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
+  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
   authDomain: "musamia-bill-management.firebaseapp.com",
   projectId: "musamia-bill-management",
-  storageBucket: "musamia-bill-management.firebasestorage.app",
+  storageBucket: "musamia-bill-management.appspot.com",
   messagingSenderId: "177984210561",
   appId: "1:177984210561:web:671f93c0869ccdf9c0af80",
-  measurementId: "G-VWCYBZP3C0"
+  measurementId: "G-VWCY3P3C0"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -35,64 +36,80 @@ export default function App() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
     try {
-      setError('');
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      setError('লগইন ব্যর্থ হয়েছে! সঠিক ইমেল ও পাসওয়ার্ড দিন।');
+      setError('লগইন ব্যর্থ হয়েছে! সঠিক ইমেইল ও পাসওয়ার্ড দিন।');
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error(err);
     }
   };
 
   if (loading) {
-    return <div style={{ color: '#fff', textAlign: 'center', marginTop: '20vh' }}>লোড হচ্ছে...</div>;
+    return <div className="min-h-screen bg-[#050814] text-white flex items-center justify-center">লোড হচ্ছে...</div>;
   }
 
   // যদি ইউজার লগইন করা না থাকে, তবে লগইন পেজ দেখাবে
   if (!user) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', backgroundColor: '#050814', color: '#fff' }}>
-        <form onSubmit={handleLogin} style={{ background: '#0f172a', padding: '30px', borderRadius: '10px', width: '350px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-          <h2 style={{ textAlign: 'center', marginBottom: '20px' }}>লেবার পোর্টাল লগইন</h2>
-          {error && <p style={{ color: '#ff4d4d', fontSize: '14px', marginBottom: '15px' }}>{error}</p>}
-          <div style={{ marginBottom: '15px' }}>
-            <label style={{ display: 'block', marginBottom: '5px' }}>ইমেল</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              required 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #334155', background: '#1e293b', color: '#fff' }}
-            />
-          </div>
-          <div style={{ marginBottom: '20px' }}>
-            <label style={{ display: 'block', marginBottom: '5px' }}>পাসওয়ার্ড</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              required 
-              style={{ width: '100%', padding: '10px', borderRadius: '5px', border: '1px solid #334155', background: '#1e293b', color: '#fff' }}
-            />
-          </div>
-          <button type="submit" style={{ width: '100%', padding: '10px', background: '#00f2fe', color: '#000', fontWeight: 'bold', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
-            লগইন করুন
-          </button>
-        </form>
+      <div className="min-h-screen bg-[#050814] text-[#e6f1ff] flex items-center justify-center p-4">
+        <div className="bg-[#0b1329] p-8 rounded-2xl shadow-2xl border border-[#1e293b] w-full max-w-md">
+          <h2 className="text-2xl font-bold mb-6 text-center text-cyan-400">লগইন করুন (Monsur Labor Portal)</h2>
+          {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-3 rounded mb-4 text-sm">{error}</div>}
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-sm mb-1 text-slate-300">ইমেইল এড্রেস</label>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-[#050814] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-400"
+                placeholder="admin@example.com"
+              />
+            </div>
+            <div>
+              <label className="block text-sm mb-1 text-slate-300">পাসওয়ার্ড</label>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="w-full bg-[#050814] border border-slate-700 rounded p-3 text-white focus:outline-none focus:border-cyan-400"
+                placeholder="********"
+              />
+            </div>
+            <button 
+              type="submit"
+              className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-bold p-3 rounded transition duration-200"
+            >
+              প্রবেশ করুন
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
 
-  // সফলভাবে লগইন হলে আপনার মূল ড্যাশবোর্ড বা সাইটের বাকি অংশ দেখাবে
+  // ইউজার লগইন করা থাকলে মূল ড্যাশবোর্ড এবং ওপরে লগআউট বাটন দেখাবে
   return (
-    <div>
-      {/* আপনার আসল ড্যাশবোর্ডের কোড এখানে থাকবে */}
-      <div style={{ position: 'absolute', top: '10px', right: '10px', zIndex: 1000 }}>
-        <button onClick={() => signOut(auth)} style={{ padding: '8px 15px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '5px', cursor: 'pointer' }}>
+    <div className="min-h-screen bg-[#050814] text-[#e6f1ff]">
+      <div className="flex justify-end p-4 bg-[#0b1329] border-b border-slate-800">
+        <button 
+          onClick={handleLogout}
+          className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
+        >
           লগআউট
         </button>
       </div>
-      
-      {/* মূল অ্যাপ কম্পোনেন্ট */}
+      <YearlyMonthlyDashboard />
     </div>
   );
 }
