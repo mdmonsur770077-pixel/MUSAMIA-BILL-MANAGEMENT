@@ -2,15 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import YearlyMonthlyDashboard from './components/YearlyMonthlyDashboard';
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "musamia-bill-management.firebaseapp.com",
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "musamia-bill-management",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "musamia-bill-management.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "177984210561",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:177984210561:web:671f93c0869ccdf9c0af80"
+  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
+  authDomain: "musamia-bill-management.firebaseapp.com",
+  projectId: "musamia-bill-management",
+  storageBucket: "musamia-bill-management.appspot.com",
+  messagingSenderId: "177984210561",
+  appId: "1:177984210561:web:671f93c0869ccdf9c0af80"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -52,7 +51,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#050814] text-white flex items-center justify-center">
+      <div className="min-h-screen bg-[#050814] text-white flex items-center justify-center text-xl">
         লোড হচ্ছে...
       </div>
     );
@@ -62,7 +61,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#050814] text-[#e6f1ff] flex items-center justify-center p-4">
         <div className="bg-[#0b1329] p-8 rounded-2xl shadow-2xl border border-[#1e293b] w-full max-w-md">
-          <h2 className="text-2xl font-bold mb-6 text-center text-cyan-400">লগইন করুন (Monsur Labor Portal)</h2>
+          <h2 className="text-2xl font-bold mb-6 text-center text-cyan-400">লগইন করুন (Monsur Portal)</h2>
           {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-3 rounded mb-4 text-sm">{error}</div>}
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
@@ -100,8 +99,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050814] text-[#e6f1ff]">
-      <div className="flex justify-end p-4 bg-[#0b1329] border-b border-slate-800">
+    <div className="min-h-screen bg-[#050814] text-[#e6f1ff] p-6">
+      <div className="flex justify-between items-center mb-6 bg-[#0b1329] p-4 rounded-xl border border-slate-800">
+        <h1 className="text-xl font-bold text-cyan-400">লেবার বিল ম্যানেজমেন্ট সিস্টেম</h1>
         <button 
           onClick={handleLogout}
           className="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-semibold transition"
@@ -109,7 +109,10 @@ export default function App() {
           লগআউট
         </button>
       </div>
-      <YearlyMonthlyDashboard />
+      <div className="bg-[#0b1329] p-6 rounded-xl border border-slate-800 text-center">
+        <h2 className="text-2xl font-semibold text-green-400 mb-2">সফলভাবে লগইন হয়েছে!</h2>
+        <p className="text-slate-400">আপনার সিস্টেম এখন সম্পূর্ণ প্রস্তুত এবং ফায়ারবেসের সাথে যুক্ত আছে।</p>
+      </div>
     </div>
   );
 }
