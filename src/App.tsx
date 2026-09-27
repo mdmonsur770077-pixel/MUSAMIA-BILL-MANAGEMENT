@@ -9,6 +9,7 @@ import { EditWorkerModal } from './components/EditWorkerModal';
 import { YearMonthFilter } from './components/YearMonthFilter';
 import { YearlyMonthlyDashboard } from './components/YearlyMonthlyDashboard';
 import { FutureRoadmapModal } from './components/FutureRoadmapModal';
+import { Login } from './components/Login';
 import { Worker, WorkRecord, WorkerSummary } from './types';
 import { INITIAL_WORKERS, INITIAL_RECORDS } from './data/initialData';
 import {
@@ -18,7 +19,9 @@ import {
   BANGLA_MONTHS,
   parseDate,
 } from './utils/dateHelpers';
-import { ShieldCheck, RotateCcw, Clock, Sparkles, Lightbulb, BarChart3, Building2, Download, Upload, Cloud, Smartphone, Laptop } from 'lucide-react';
+import { ShieldCheck, RotateCcw, Clock, Sparkles, Lightbulb, BarChart3, Building2, Download, Upload, Cloud, Smartphone, Laptop, LogOut } from 'lucide-react';
+import { auth } from './services/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import {
   subscribeToWorkers,
   subscribeToRecords,
@@ -32,6 +35,19 @@ import {
 } from './services/cloudService';
 
 export default function App() {
+  // Authentication states
+  const [user, setUser] = useState<any>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  // Firebase Auth State Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
   // 1. LocalStorage synchronization matching keys
   const [workers, setWorkers] = useState<Worker[]>(() => {
     try {
@@ -214,16 +230,13 @@ export default function App() {
       createdAt: new Date().toISOString().split('T')[0],
     };
     setWorkers((prev) => [newWorker, ...prev]);
-    // Automatically select the new worker for immediate daily entry
     setQuickEntryWorkerId(newWorker.id);
-    // Real-time Cloud Firestore save
     saveWorkerToCloud(newWorker).catch((err) => console.error('Cloud save worker error:', err));
   };
 
   // Handler: Update worker
   const handleUpdateWorker = (updatedWorker: Worker) => {
     setWorkers((prev) => prev.map((w) => (w.id === updatedWorker.id ? updatedWorker : w)));
-    // Real-time Cloud Firestore update
     saveWorkerToCloud(updatedWorker).catch((err) => console.error('Cloud update worker error:', err));
   };
 
@@ -231,23 +244,21 @@ export default function App() {
   const handleDeleteWorker = (workerId: string) => {
     const worker = workers.find((w) => w.id === workerId);
     const workerName = worker ? worker.name : 'এই লেবার';
-    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর যাবতীয় তথ্য ও হিসাব মুছে ফেলতে চান?`)) {
+    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর যাবতীয় তথ্য ও হিসাব মুছে ফেলতে চান?`)) {
       setWorkers((prev) => prev.filter((w) => w.id !== workerId));
       setRecords((prev) => prev.filter((r) => r.workerId !== workerId));
       if (activeDetailWorkerId === workerId) setActiveDetailWorkerId(null);
       if (activeEditWorkerId === workerId) setActiveEditWorkerId(null);
       if (quickEntryWorkerId === workerId) setQuickEntryWorkerId(null);
-      // Real-time Cloud Firestore delete
       deleteWorkerFromCloud(workerId).catch((err) => console.error('Cloud delete worker error:', err));
     }
   };
 
   // Handler: Add transaction record
   const handleAddRecord = (recordData: Omit<WorkRecord, 'id' | 'createdAt'>) => {
-    // Validate target worker
     const targetWorker = workers.find((w) => w.id === recordData.workerId) || (workers.length > 0 ? workers[0] : null);
     if (!targetWorker) {
-      alert('ত্রুটি: কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
+      alert('ত্রুটি: কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
       return;
     }
 
@@ -261,33 +272,27 @@ export default function App() {
 
     setRecords((prev) => [newRecord, ...prev]);
 
-    // Ensure the newly entered record is immediately visible in the active filter!
     const { year: recordYear, monthIndex: recordMonth } = parseDate(recordData.date);
 
-    // If currently filtered to a different year, auto-switch to this year so user sees their record
     if (selectedYear !== 'all' && selectedYear !== recordYear) {
       setSelectedYear(recordYear);
     }
-    // If currently filtered to a different month, auto-switch to this month so user sees their record
     if (selectedMonth !== 'all' && selectedMonth !== recordMonth) {
       setSelectedMonth(recordMonth);
     }
 
-    // Real-time Cloud Firestore save (immediately syncs to PC)
     saveRecordToCloud(newRecord).catch((err) => console.error('Cloud save record error:', err));
   };
 
   // Handler: Delete record
   const handleDeleteRecord = (recordId: string) => {
     setRecords((prev) => prev.filter((r) => r.id !== recordId));
-    // Real-time Cloud Firestore delete
     deleteRecordFromCloud(recordId).catch((err) => console.error('Cloud delete record error:', err));
   };
 
   // Handler: Update existing record
   const handleUpdateRecord = (updatedRecord: WorkRecord) => {
     setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)));
-    // Real-time Cloud Firestore update
     updateRecordInCloud(updatedRecord).catch((err) => console.error('Cloud update record error:', err));
   };
 
@@ -295,14 +300,13 @@ export default function App() {
   const handleResetData = () => {
     if (
       window.confirm(
-        'আপনি কি পূর্বনির্ধারিত ডেমো ডেটায় ফিরে যেতে চান? জুলাই, আগস্ট ও সেপ্টেম্বর ২০২৬-এর ডেটা রিলোড হবে।'
+        'আপনি কি পূর্বনির্ধারিত ডেমো ডেটায় ফিরে যেতে চান? জুলাই, আগস্ট ও সেপ্টেম্বর ২০২৬-এর ডেটা রিলোড হবে।'
       )
     ) {
       setWorkers(INITIAL_WORKERS);
       setRecords(INITIAL_RECORDS);
       localStorage.removeItem('nexus_workers');
       localStorage.removeItem('nexus_records');
-      // Reset Cloud data
       replaceAllCloudData(INITIAL_WORKERS, INITIAL_RECORDS).catch((err) =>
         console.error('Cloud reset error:', err)
       );
@@ -368,7 +372,7 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Download Full Backup (JSON) for complete data portability
+  // Download Full Backup (JSON)
   const handleDownloadBackup = () => {
     try {
       const backupData = {
@@ -398,11 +402,11 @@ export default function App() {
       URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Failed to export backup', err);
-      alert('ব্যাকআপ ফাইল তৈরিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+      alert('ব্যাকআপ ফাইল তৈরিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
     }
   };
 
-  // Restore Backup (JSON) for full data portability
+  // Restore Backup (JSON)
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -414,7 +418,7 @@ export default function App() {
         const data = JSON.parse(text);
 
         if (!data || !Array.isArray(data.workers) || !Array.isArray(data.records)) {
-          alert('ত্রুটি: ব্যাকআপ ফাইলটির ফরম্যাট সঠিক নয়। "workers" এবং "records" ডাটা পাওয়া যায়নি।');
+          alert('ত্রুটি: ব্যাকআপ ফাইলটির ফরম্যাট সঠিক নয়। "workers" এবং "records" ডাটা পাওয়া যায়নি।');
           return;
         }
 
@@ -428,11 +432,11 @@ export default function App() {
           replaceAllCloudData(data.workers, data.records).catch((err) =>
             console.error('Cloud restore sync error:', err)
           );
-          alert(`সফলভাবে ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেনের ব্যাকআপ রিস্টোর ও ক্লাউড সিঙ্ক সম্পন্ন হয়েছে!`);
+          alert(`সফলভাবে ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেনের ব্যাকআপ রিস্টোর ও ক্লাউড সিঙ্ক সম্পন্ন হয়েছে!`);
         }
       } catch (err) {
         console.error('Failed to parse backup JSON file', err);
-        alert('ত্রুটি: ফাইলটি পড়তে ব্যর্থ হয়েছে। দয়া করে সঠিক JSON ব্যাকআপ ফাইল নির্বাচন করুন।');
+        alert('ত্রুটি: ফাইলটি পড়তে ব্যর্থ হয়েছে। দয়া করে সঠিক JSON ব্যাকআপ ফাইল নির্বাচন করুন।');
       } finally {
         if (fileInputRef.current) {
           fileInputRef.current.value = '';
@@ -441,6 +445,20 @@ export default function App() {
     };
     reader.readAsText(file);
   };
+
+  // Auth Loading Screen
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center text-[#00f2fe] font-orbitron text-xl">
+        লোড হচ্ছে...
+      </div>
+    );
+  }
+
+  // If user is not logged in, show Login Component
+  if (!user) {
+    return <Login />;
+  }
 
   // Active worker objects for modals
   const activeDetailSummary =
@@ -502,7 +520,7 @@ export default function App() {
               <Cloud className="w-4 h-4 shrink-0" />
               <span>
                 {cloudSyncStatus === 'connected'
-                  ? 'মোবাইল ও পিসি অটো-সিঙ্ক সক্রিয়'
+                  ? 'মোবাইল ও পিসি অটো-সিঙ্ক সক্রিয়'
                   : cloudSyncStatus === 'syncing'
                   ? 'ক্লাউড সিঙ্ক হচ্ছে...'
                   : 'অফলাইন মোড (লোকাল সেভ)'}
@@ -521,14 +539,14 @@ export default function App() {
               </span>
             )}
 
-            {/* "নতুন ফিচারের আইডিয়া" Button */}
+            {/* "নতুন ফিচারের আইডিয়া" Button */}
             <button
               onClick={() => setShowRoadmapModal(true)}
               className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-semibold transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] cursor-pointer text-xs sm:text-sm"
               title="নতুন যেসব ফিচার যুক্ত করা যাবে"
             >
               <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>নতুন ফিচারের আইডিয়া</span>
+              <span>নতুন ফিচারের আইডিয়া</span>
             </button>
 
             {/* "সম্পূর্ণ ব্যাকআপ ডাউনলোড" (Download Full Backup) Button */}
@@ -569,10 +587,15 @@ export default function App() {
               <span>ডেমো ডেটা রিস্টোর</span>
             </button>
 
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs sm:text-sm">
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>রিয়েল-টাইম স্টোরেজ সিঙ্ক</span>
-            </span>
+            {/* Logout Button */}
+            <button
+              onClick={() => signOut(auth)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-400 text-xs sm:text-sm transition-all cursor-pointer font-semibold shadow-[0_0_15px_rgba(239,68,68,0.2)]"
+              title="লগআউট করুন"
+            >
+              <LogOut className="w-4 h-4 shrink-0" />
+              <span>লগআউট</span>
+            </button>
           </div>
         </header>
 
@@ -585,7 +608,6 @@ export default function App() {
             currentYearSummary={currentYearSummary}
             onSelectYear={(yr) => {
               setSelectedYear(yr);
-              // keep month selection
             }}
             onSelectMonth={(m) => setSelectedMonth(m)}
             showAnalytics={showAnalytics}
