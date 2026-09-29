@@ -4,12 +4,13 @@ import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, User 
 import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BrG5W_qudC5GNoWU",
+  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
   authDomain: "musamia-bill-management.firebaseapp.com",
   projectId: "musamia-bill-management",
-  storageBucket: "musamia-bill-management.appspot.com",
+  storageBucket: "musamia-bill-management.firebasestorage.app",
   messagingSenderId: "177984210561",
-  appId: "1:177984210561:web:671f93c0869ccdf9c0af80"
+  appId: "1:177984210561:web:671f93c0869ccdf9c0af80",
+  measurementId: "G-7T806FR894"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -37,7 +38,7 @@ export default function App() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
     } catch (err: any) {
-      console.error("Firebase Login Error:", err); // ব্রাউজার কনসোলে আসল ইরর দেখাবে
+      console.error("Firebase Login Error:", err);
       setError('লগইন ব্যর্থ হয়েছে: ' + err.message);
     }
   };
