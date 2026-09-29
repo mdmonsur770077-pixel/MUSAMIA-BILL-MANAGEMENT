@@ -1,30 +1,22 @@
-import { initializeApp, getApps, getApp } from 'firebase/app';
-import { initializeFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
-import firebaseConfig from '../../firebase-applet-config.json';
+// src/services/firebase.ts
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+import { getAuth } from "firebase/auth";
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+// Your web app's Firebase configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
+  authDomain: "musamia-bill-management.firebaseapp.com",
+  projectId: "musamia-bill-management",
+  storageBucket: "musamia-bill-management.firebasestorage.app",
+  messagingSenderId: "177984210561",
+  appId: "1:177984210561:web:671f93c0869ccdf9c0af80",
+  measurementId: "G-VWCYBZP3C0"
+};
 
-export const db = initializeFirestore(
-  app,
-  {
-    experimentalForceLongPolling: true,
-  },
-  firebaseConfig.firestoreDatabaseId || undefined
-);
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
 
+// Authentication export
 export const auth = getAuth(app);
-
-// Connection check as mandated by Firebase skill
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firestore offline notice. Operating in offline/cached mode.');
-    }
-  }
-}
-testConnection().catch(() => {});
-
-export default app;
