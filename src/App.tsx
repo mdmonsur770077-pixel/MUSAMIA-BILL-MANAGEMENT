@@ -116,4 +116,3 @@ export default function App() {
     </div>
   );
 }
-AYTA PURA DELETE KORA UPORAR CODE TA DEVO
