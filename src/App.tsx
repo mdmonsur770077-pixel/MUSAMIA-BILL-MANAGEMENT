@@ -18,7 +18,7 @@ import {
   BANGLA_MONTHS,
   parseDate,
 } from './utils/dateHelpers';
-import { ShieldCheck, RotateCcw, Clock, Sparkles, Lightbulb, BarChart3, Building2, Download, Upload, Cloud, Smartphone, Laptop } from 'lucide-react';
+import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, Mail, Loader2 } from 'lucide-react';
 import {
   subscribeToWorkers,
   subscribeToRecords,
@@ -30,8 +30,52 @@ import {
   migrateLocalDataToCloudIfEmpty,
   replaceAllCloudData,
 } from './services/cloudService';
+import { auth } from './services/firebase';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
+  // ─── Firebase Auth State ───
+  const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [loginEmail, setLoginEmail] = useState<string>('');
+  const [loginPassword, setLoginPassword] = useState<string>('');
+  const [loginError, setLoginError] = useState<string>('');
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+
+  // Monitor Auth State
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Login Handler
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    setIsLoggingIn(true);
+    try {
+      await signInWithEmailAndPassword(auth, loginEmail.trim(), loginPassword);
+      setLoginPassword('');
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setLoginError('লগইন ব্যর্থ হয়েছে! ইমেইল বা পাসওয়ার্ড সঠিক আছে কিনা চেক করুন।');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  // Logout Handler
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
+
   // 1. LocalStorage synchronization matching keys
   const [workers, setWorkers] = useState<Worker[]>(() => {
     try {
@@ -64,6 +108,8 @@ export default function App() {
 
   // Real-time Firestore Cloud Synchronization between Mobile & PC
   useEffect(() => {
+    if (!currentUser) return;
+
     let isMounted = true;
 
     // 1. Initial check: If cloud is completely empty, migrate local data up
@@ -88,7 +134,7 @@ export default function App() {
       console.warn('Cloud migration check notice:', err);
     });
 
-    // 2. Real-time Workers subscription (Live auto-update across mobile & PC)
+    // 2. Real-time Workers subscription
     const unsubWorkers = subscribeToWorkers(
       (cloudWorkers) => {
         if (!isMounted) return;
@@ -101,7 +147,7 @@ export default function App() {
       }
     );
 
-    // 3. Real-time Records subscription (Live auto-update across mobile & PC)
+    // 3. Real-time Records subscription
     const unsubRecords = subscribeToRecords(
       (cloudRecords) => {
         if (!isMounted) return;
@@ -126,7 +172,7 @@ export default function App() {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [currentUser]);
 
   // Keep localStorage updated as an instant offline fallback
   useEffect(() => {
@@ -181,7 +227,6 @@ export default function App() {
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(defaultYear);
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
 
-  // Keep selectedYear synchronized if availableYears changes
   useEffect(() => {
     if (selectedYear !== 'all' && availableYears.length > 0 && !availableYears.includes(selectedYear)) {
       setSelectedYear(availableYears[0]);
@@ -198,7 +243,6 @@ export default function App() {
     return filterSummariesByPeriod(workers, records, selectedYear, selectedMonth);
   }, [workers, records, selectedYear, selectedMonth]);
 
-  // Human-readable period label
   const periodLabel = useMemo(() => {
     if (selectedYear === 'all') return 'সকল বছরের সার্বিক হিসাব';
     const yrText = `${toBanglaNumber(selectedYear)} সাল`;
@@ -356,7 +400,7 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Download Full Backup (JSON) for complete data portability
+  // Download Full Backup (JSON)
   const handleDownloadBackup = () => {
     try {
       const backupData = {
@@ -390,7 +434,7 @@ export default function App() {
     }
   };
 
-  // Restore Backup (JSON) for full data portability
+  // Restore Backup (JSON)
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -436,15 +480,112 @@ export default function App() {
     workers.find((w) => w.id === activeDetailWorkerId) || activeDetailSummary?.worker || null;
   const activeEditWorker = workers.find((w) => w.id === activeEditWorkerId) || null;
 
+  // ─── Loading Screen During Auth Initialization ───
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117] text-[#00f2fe]">
+        <ThreeBackground />
+        <div className="relative z-10 flex flex-col items-center gap-3">
+          <Loader2 className="w-10 h-10 animate-spin text-[#00f2fe]" />
+          <p className="text-sm font-medium">লোড হচ্ছে...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Login Screen If Not Authenticated ───
+  if (!currentUser) {
+    return (
+      <div className="relative min-h-screen flex items-center justify-center px-4 text-[#e6f1ff]">
+        <ThreeBackground />
+        <div className="relative z-10 max-w-md w-full bg-slate-900/80 backdrop-blur-xl border border-[#00f2fe]/30 rounded-2xl p-6 sm:p-8 shadow-[0_0_40px_rgba(0,242,254,0.15)]">
+          <div className="text-center mb-6">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] mb-3 shadow-[0_0_15px_rgba(0,242,254,0.3)]">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h1 className="font-orbitron text-2xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] to-[#4facfe] bg-clip-text text-transparent">
+              ADMIN LOGIN
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 font-bengali">মনসুর লেবার পোর্টাল অ্যাক্সেস করতে লগইন করুন</p>
+          </div>
+
+          {loginError && (
+            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center font-medium">
+              {loginError}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">ইমেইল এড্রেস</label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="email"
+                  required
+                  value={loginEmail}
+                  onChange={(e) => setLoginEmail(e.target.value)}
+                  placeholder="admin@example.com"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00f2fe] transition-all"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">পাসওয়ার্ড</label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="password"
+                  required
+                  value={loginPassword}
+                  onChange={(e) => setLoginPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00f2fe] transition-all"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>লগইন হচ্ছে...</span>
+                </>
+              ) : (
+                <span>লগইন করুন</span>
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── Main App View If Logged In ───
   return (
     <div className="relative min-h-screen text-[#e6f1ff] pb-16">
       <ThreeBackground />
 
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs sm:text-sm mb-3 shadow-[0_0_20px_rgba(0,242,254,0.25)] font-semibold">
-            <Building2 className="w-4 h-4 text-[#00f2fe]" />
-            <span className="tracking-wider">মনসুর লেবার কন্ট্রোল সিস্টেম</span>
+          <div className="flex items-center justify-between mb-3 no-print">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs sm:text-sm shadow-[0_0_20px_rgba(0,242,254,0.25)] font-semibold">
+              <Mail className="w-4 h-4 text-[#00f2fe]" />
+              <span className="tracking-wider">{currentUser.email}</span>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.15)]"
+              title="লগআউট করুন"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>লগআউট</span>
+            </button>
           </div>
 
           <h1 className="font-orbitron text-2xl sm:text-4xl md:text-5xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] via-[#4facfe] to-[#00f2fe] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(0,242,254,0.5)] leading-tight">
@@ -519,7 +660,6 @@ export default function App() {
               title="শ্রমিক ও সমস্ত লেনদেনের সম্পূর্ণ ডাটা JSON ফাইল হিসেবে ব্যাকআপ ডাউনলোড করুন"
               id="download-full-backup-btn"
             >
-              <Download className="w-4 h-4 text-[#00f2fe] shrink-0" />
               <span>সম্পূর্ণ ব্যাকআপ ডাউনলোড (JSON)</span>
             </button>
 
@@ -529,7 +669,6 @@ export default function App() {
               title="পূর্বে সংরক্ষিত JSON ব্যাকআপ ফাইল থেকে ডাটা রিস্টোর করুন"
               id="restore-backup-btn"
             >
-              <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
               <span>ব্যাকআপ রিস্টোর</span>
             </button>
             <input
