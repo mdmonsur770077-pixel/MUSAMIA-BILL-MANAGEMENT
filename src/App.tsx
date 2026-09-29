@@ -1,702 +1,648 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut, User } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
-import * as THREE from 'three';
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
-  authDomain: "musamia-bill-management.firebaseapp.com",
-  projectId: "musamia-bill-management",
-  storageBucket: "musamia-bill-management.firebasestorage.app",
-  messagingSenderId: "177984210561",
-  appId: "1:177984210561:web:671f93c0869ccdf9c0af80",
-  measurementId: "G-7T806FR894"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-export const db = getFirestore(app);
-
-interface Worker {
-  id: number;
-  name: string;
-  trade: string;
-  phone: string;
-  dailyWage: number;
-}
-
-interface RecordEntry {
-  id: number;
-  workerId: number;
-  date: string;
-  morningDays: number; // সকালের হাজিরা
-  eveningDays: number; // বিকালের হাজিরা
-  paid: number;
-  advance: number;
-  notes: string;
-}
-
-const BANGLA_MONTHS = [
-  'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
-  'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
-];
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { ThreeBackground } from './components/ThreeBackground';
+import { StatsCards } from './components/StatsCards';
+import { WorkerRegistrationForm } from './components/WorkerRegistrationForm';
+import { DailyTransactionForm } from './components/DailyTransactionForm';
+import { SummaryTable } from './components/SummaryTable';
+import { WorkerDetailModal } from './components/WorkerDetailModal';
+import { EditWorkerModal } from './components/EditWorkerModal';
+import { YearMonthFilter } from './components/YearMonthFilter';
+import { YearlyMonthlyDashboard } from './components/YearlyMonthlyDashboard';
+import { FutureRoadmapModal } from './components/FutureRoadmapModal';
+import { Worker, WorkRecord, WorkerSummary } from './types';
+import { INITIAL_WORKERS, INITIAL_RECORDS } from './data/initialData';
+import {
+  computeYearlyMonthlyData,
+  filterSummariesByPeriod,
+  toBanglaNumber,
+  BANGLA_MONTHS,
+  parseDate,
+} from './utils/dateHelpers';
+import { ShieldCheck, RotateCcw, Clock, Sparkles, Lightbulb, BarChart3, Building2, Download, Upload, Cloud, Smartphone, Laptop } from 'lucide-react';
+import {
+  subscribeToWorkers,
+  subscribeToRecords,
+  saveWorkerToCloud,
+  deleteWorkerFromCloud,
+  saveRecordToCloud,
+  updateRecordInCloud,
+  deleteRecordFromCloud,
+  migrateLocalDataToCloudIfEmpty,
+  replaceAllCloudData,
+} from './services/cloudService';
 
 export default function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(true);
+  // 1. LocalStorage synchronization matching keys
+  const [workers, setWorkers] = useState<Worker[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_workers');
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse saved workers', e);
+    }
+    return INITIAL_WORKERS;
+  });
 
-  // লেবার এবং রেকর্ড স্টেট
-  const [workers, setWorkers] = useState<Worker[]>([
-    { id: 1, name: 'রহিম মিয়া', trade: 'মেকানিক / রাজমিস্ত্রি', phone: '01711223344', dailyWage: 600 },
-    { id: 2, name: 'করিম শেখ', trade: 'যোগালি / হেল্পার', phone: '01822334455', dailyWage: 450 }
-  ]);
+  const [records, setRecords] = useState<WorkRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_records');
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse saved records', e);
+    }
+    return INITIAL_RECORDS;
+  });
 
-  const [records, setRecords] = useState<RecordEntry[]>([
-    { id: 101, workerId: 1, date: '2026-09-01', morningDays: 0.5, eveningDays: 0.5, paid: 500, advance: 0, notes: 'পূর্ণ দিন' },
-    { id: 102, workerId: 2, date: '2026-09-01', morningDays: 0.5, eveningDays: 0, paid: 400, advance: 50, notes: 'অর্ধবেলা' }
-  ]);
+  // Cloud sync status ('connected' | 'syncing' | 'offline')
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'connected' | 'syncing' | 'offline'>('syncing');
 
-  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
-  
-  // ফর্ম স্টেট
-  const [newWorkerName, setNewWorkerName] = useState('');
-  const [newWorkerTrade, setNewWorkerTrade] = useState('রাজমিস্ত্রি');
-  const [newWorkerPhone, setNewWorkerPhone] = useState('');
-  const [newWorkerWage, setNewWorkerWage] = useState(500);
-
-  const [entryWorkerId, setEntryWorkerId] = useState<number>(1);
-  const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [morningDays, setMorningDays] = useState<number>(0.5);
-  const [eveningDays, setEveningDays] = useState<number>(0.5);
-  const [entryPaid, setEntryPaid] = useState<number>(0);
-  const [entryAdvance, setEntryAdvance] = useState<number>(0);
-  const [entryRemarks, setEntryRemarks] = useState('');
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'due' | 'claim' | 'settled'>('all');
-  const [activeModalWorker, setActiveModalWorker] = useState<any>(null);
-  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
-
+  // Real-time Firestore Cloud Synchronization between Mobile & PC
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
+    let isMounted = true;
+
+    // 1. Initial check: If cloud is completely empty, migrate local data up
+    const localWorkersRaw = localStorage.getItem('nexus_workers');
+    const localRecordsRaw = localStorage.getItem('nexus_records');
+    let localW = INITIAL_WORKERS;
+    let localR = INITIAL_RECORDS;
+    try {
+      if (localWorkersRaw) {
+        const parsedW = JSON.parse(localWorkersRaw);
+        if (Array.isArray(parsedW) && parsedW.length > 0) localW = parsedW;
+      }
+      if (localRecordsRaw) {
+        const parsedR = JSON.parse(localRecordsRaw);
+        if (Array.isArray(parsedR) && parsedR.length > 0) localR = parsedR;
+      }
+    } catch (e) {
+      console.warn('Error reading local cache for initial migration', e);
+    }
+
+    migrateLocalDataToCloudIfEmpty(localW, localR).catch((err) => {
+      console.warn('Cloud migration check notice:', err);
     });
-    return () => unsubscribe();
-  }, []);
 
-  // Three.js ব্যাকগ্রাউন্ড অ্যানিমেশন ইফেক্ট
-  useEffect(() => {
-    const container = document.getElementById('three-bg');
-    if (!container) return;
-    container.innerHTML = '';
+    // 2. Real-time Workers subscription (Live auto-update across mobile & PC)
+    const unsubWorkers = subscribeToWorkers(
+      (cloudWorkers) => {
+        if (!isMounted) return;
+        setWorkers(cloudWorkers);
+        setCloudSyncStatus('connected');
+      },
+      (err) => {
+        console.error('Cloud workers sync error:', err);
+        setCloudSyncStatus('offline');
+      }
+    );
 
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    container.appendChild(renderer.domElement);
+    // 3. Real-time Records subscription (Live auto-update across mobile & PC)
+    const unsubRecords = subscribeToRecords(
+      (cloudRecords) => {
+        if (!isMounted) return;
+        setRecords(cloudRecords);
+        setCloudSyncStatus('connected');
+      },
+      (err) => {
+        console.error('Cloud records sync error:', err);
+        setCloudSyncStatus('offline');
+      }
+    );
 
-    const geometry = new THREE.IcosahedronGeometry(2, 1);
-    const material = new THREE.MeshBasicMaterial({ color: 0x00f2fe, wireframe: true, transparent: true, opacity: 0.15 });
-    const sphere = new THREE.Mesh(geometry, material);
-    scene.add(sphere);
-
-    camera.position.z = 5;
-
-    let animationFrameId: number;
-    const animate = () => {
-      animationFrameId = requestAnimationFrame(animate);
-      sphere.rotation.x += 0.001;
-      sphere.rotation.y += 0.002;
-      renderer.render(scene, camera);
-    };
-    animate();
-
-    const handleResize = () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    };
-    window.addEventListener('resize', handleResize);
+    const handleOnline = () => setCloudSyncStatus('connected');
+    const handleOffline = () => setCloudSyncStatus('offline');
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      cancelAnimationFrame(animationFrameId);
-      if (renderer.domElement) renderer.dispose();
+      isMounted = false;
+      unsubWorkers();
+      unsubRecords();
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
     };
-  }, [user]);
+  }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+  // Keep localStorage updated as an instant offline fallback
+  useEffect(() => {
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-    } catch (err: any) {
-      console.error("Firebase Login Error:", err);
-      setError('লগইন ব্যর্থ হয়েছে: ' + err.message);
+      localStorage.setItem('nexus_workers', JSON.stringify(workers));
+    } catch (e) {
+      console.error('Error saving workers to localStorage', e);
     }
-  };
+  }, [workers]);
 
-  const handleLogout = async () => {
+  useEffect(() => {
     try {
-      await signOut(auth);
-    } catch (err) {
-      console.error(err);
+      localStorage.setItem('nexus_records', JSON.stringify(records));
+    } catch (e) {
+      console.error('Error saving records to localStorage', e);
     }
-  };
+  }, [records]);
 
-  const handleAddWorker = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newWorkerName.trim()) return;
+  // Modals & Active selections
+  const [activeDetailWorkerId, setActiveDetailWorkerId] = useState<string | null>(null);
+  const [activeEditWorkerId, setActiveEditWorkerId] = useState<string | null>(null);
+  const [quickEntryWorkerId, setQuickEntryWorkerId] = useState<string | null>(null);
+  const [showRoadmapModal, setShowRoadmapModal] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
 
+  // Time display
+  const [currentTime, setCurrentTime] = useState('');
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleDateString('bn-BD', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+        })
+      );
+    };
+    updateTime();
+    const timer = setInterval(updateTime, 60000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // 2. Yearly & Monthly Breakdown Computation
+  const { availableYears, yearSummaries } = useMemo(() => {
+    return computeYearlyMonthlyData(workers, records);
+  }, [workers, records]);
+
+  // Filter State: Year and Month
+  const defaultYear = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
+  const [selectedYear, setSelectedYear] = useState<number | 'all'>(defaultYear);
+  const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
+
+  // Keep selectedYear synchronized if availableYears changes
+  useEffect(() => {
+    if (selectedYear !== 'all' && availableYears.length > 0 && !availableYears.includes(selectedYear)) {
+      setSelectedYear(availableYears[0]);
+    }
+  }, [availableYears, selectedYear]);
+
+  const currentYearSummary = useMemo(() => {
+    const yr = selectedYear === 'all' ? (availableYears[0] || new Date().getFullYear()) : selectedYear;
+    return yearSummaries.find((y) => y.year === yr);
+  }, [yearSummaries, selectedYear, availableYears]);
+
+  // 3. Computed Summaries for current period
+  const periodSummaries: WorkerSummary[] = useMemo(() => {
+    return filterSummariesByPeriod(workers, records, selectedYear, selectedMonth);
+  }, [workers, records, selectedYear, selectedMonth]);
+
+  // Human-readable period label
+  const periodLabel = useMemo(() => {
+    if (selectedYear === 'all') return 'সকল বছরের সার্বিক হিসাব';
+    const yrText = `${toBanglaNumber(selectedYear)} সাল`;
+    if (selectedMonth === 'all') return `${yrText} (বাৎসরিক হিসাব)`;
+    return `${BANGLA_MONTHS[selectedMonth - 1]} ${yrText} (মাসিক হিসাব)`;
+  }, [selectedYear, selectedMonth]);
+
+  // Handler: Add worker
+  const handleAddWorker = (newWorkerData: Omit<Worker, 'id' | 'createdAt'>) => {
     const newWorker: Worker = {
-      id: Date.now(),
-      name: newWorkerName,
-      trade: newWorkerTrade,
-      phone: newWorkerPhone || 'প্রযোজ্য নয়',
-      dailyWage: Number(newWorkerWage)
+      ...newWorkerData,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString().split('T')[0],
     };
-
-    setWorkers([...workers, newWorker]);
-    setNewWorkerName('');
-    setNewWorkerPhone('');
-    alert('নতুন শ্রমিক সফলভাবে যুক্ত করা হয়েছে!');
+    setWorkers((prev) => [newWorker, ...prev]);
+    setQuickEntryWorkerId(newWorker.id);
+    saveWorkerToCloud(newWorker).catch((err) => console.error('Cloud save worker error:', err));
   };
 
-  const handleAddRecord = (e: React.FormEvent) => {
-    e.preventDefault();
-    const newRecord: RecordEntry = {
-      id: Date.now(),
-      workerId: Number(entryWorkerId),
-      date: entryDate,
-      morningDays: Number(morningDays),
-      eveningDays: Number(eveningDays),
-      paid: Number(entryPaid),
-      advance: Number(entryAdvance),
-      notes: entryRemarks
-    };
-
-    setRecords([...records, newRecord]);
-    setEntryPaid(0);
-    setEntryAdvance(0);
-    setEntryRemarks('');
-    alert('সকাল ও বিকালের হাজিরাসহ লেনদেন সফলভাবে সংরক্ষণ করা হয়েছে!');
+  // Handler: Update worker
+  const handleUpdateWorker = (updatedWorker: Worker) => {
+    setWorkers((prev) => prev.map((w) => (w.id === updatedWorker.id ? updatedWorker : w)));
+    saveWorkerToCloud(updatedWorker).catch((err) => console.error('Cloud update worker error:', err));
   };
 
-  const handleDeleteWorker = (workerId: number) => {
-    if (window.confirm('আপনি কি নিশ্চিতভাবে এই শ্রমিককে মুছে ফেলতে চান?')) {
-      setWorkers(workers.filter(w => w.id !== workerId));
-      setRecords(records.filter(r => r.workerId !== workerId));
+  // Handler: Delete worker and their records
+  const handleDeleteWorker = (workerId: string) => {
+    const worker = workers.find((w) => w.id === workerId);
+    const workerName = worker ? worker.name : 'এই লেবার';
+    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর যাবতীয় তথ্য ও হিসাব মুছে ফেলতে চান?`)) {
+      setWorkers((prev) => prev.filter((w) => w.id !== workerId));
+      setRecords((prev) => prev.filter((r) => r.workerId !== workerId));
+      if (activeDetailWorkerId === workerId) setActiveDetailWorkerId(null);
+      if (activeEditWorkerId === workerId) setActiveEditWorkerId(null);
+      if (quickEntryWorkerId === workerId) setQuickEntryWorkerId(null);
+      deleteWorkerFromCloud(workerId).catch((err) => console.error('Cloud delete worker error:', err));
     }
   };
 
-  const workerSummaries = useMemo(() => {
-    return workers.map(worker => {
-      const workerRecords = records.filter(r => {
-        const rDate = new Date(r.date);
-        return r.workerId === worker.id && 
-               rDate.getMonth() + 1 === selectedMonth && 
-               rDate.getFullYear() === selectedYear;
-      });
+  // Handler: Add transaction record
+  const handleAddRecord = (recordData: Omit<WorkRecord, 'id' | 'createdAt'>) => {
+    const targetWorker = workers.find((w) => w.id === recordData.workerId) || (workers.length > 0 ? workers[0] : null);
+    if (!targetWorker) {
+      alert('ত্রুটি: কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
+      return;
+    }
 
-      // মোট দিন = সকালের হাজিরা + বিকালের হাজিরা যোগফল
-      const totalDays = workerRecords.reduce((sum, r) => sum + r.morningDays + r.eveningDays, 0);
-      const totalEarned = totalDays * worker.dailyWage;
-      const totalPaidOnly = workerRecords.reduce((sum, r) => sum + r.paid, 0);
-      const totalAdvanceOnly = workerRecords.reduce((sum, r) => sum + r.advance, 0);
-      const totalPaidAll = totalPaidOnly + totalAdvanceOnly;
-      
-      const balance = totalEarned - totalPaidAll;
-      let status = 'settled';
-      if (balance > 0) status = 'due';
-      else if (balance < 0) status = 'claim';
+    const safeWorkerId = targetWorker.id;
+    const newRecord: WorkRecord = {
+      ...recordData,
+      workerId: safeWorkerId,
+      id: Date.now().toString(),
+      createdAt: new Date().toISOString(),
+    };
 
-      return {
-        worker,
-        records: workerRecords,
-        totalDays,
-        totalEarned,
-        totalPaidAll,
-        balance,
-        status
+    setRecords((prev) => [newRecord, ...prev]);
+
+    const { year: recordYear, monthIndex: recordMonth } = parseDate(recordData.date);
+
+    if (selectedYear !== 'all' && selectedYear !== recordYear) {
+      setSelectedYear(recordYear);
+    }
+    if (selectedMonth !== 'all' && selectedMonth !== recordMonth) {
+      setSelectedMonth(recordMonth);
+    }
+
+    saveRecordToCloud(newRecord).catch((err) => console.error('Cloud save record error:', err));
+  };
+
+  // Handler: Delete record
+  const handleDeleteRecord = (recordId: string) => {
+    setRecords((prev) => prev.filter((r) => r.id !== recordId));
+    deleteRecordFromCloud(recordId).catch((err) => console.error('Cloud delete record error:', err));
+  };
+
+  // Handler: Update existing record
+  const handleUpdateRecord = (updatedRecord: WorkRecord) => {
+    setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)));
+    updateRecordInCloud(updatedRecord).catch((err) => console.error('Cloud update record error:', err));
+  };
+
+  // Reset to initial sample data
+  const handleResetData = () => {
+    if (
+      window.confirm(
+        'আপনি কি পূর্বনির্ধারিত ডেমো ডেটায় ফিরে যেতে চান? জুলাই, আগস্ট ও সেপ্টেম্বর ২০২৬-এর ডেটা রিলোড হবে।'
+      )
+    ) {
+      setWorkers(INITIAL_WORKERS);
+      setRecords(INITIAL_RECORDS);
+      localStorage.removeItem('nexus_workers');
+      localStorage.removeItem('nexus_records');
+      replaceAllCloudData(INITIAL_WORKERS, INITIAL_RECORDS).catch((err) =>
+        console.error('Cloud reset error:', err)
+      );
+    }
+  };
+
+  // Export CSV respecting active period
+  const handleExportCsv = () => {
+    if (periodSummaries.length === 0) {
+      alert('এক্সপোর্ট করার জন্য কোনো ডাটা নেই');
+      return;
+    }
+
+    const headers = [
+      'Worker Name',
+      'Trade',
+      'Daily Wage (BDT)',
+      'Total Days',
+      'Total Earned (BDT)',
+      'Wages Paid (BDT)',
+      'Advance Given (BDT)',
+      'Total Received (BDT)',
+      'Net Balance (BDT)',
+      'Status',
+    ];
+
+    const rows = periodSummaries.map((s) => {
+      let statusLabel = 'Settled';
+      if (s.status === 'claim') statusLabel = `Company Claim (${Math.abs(s.balance)})`;
+      if (s.status === 'due') statusLabel = `Labor Due (${s.balance})`;
+
+      return [
+        `"${s.worker.name}"`,
+        `"${s.worker.trade || ''}"`,
+        s.worker.dailyWage,
+        s.totalDays,
+        s.totalEarned,
+        s.totalPaid,
+        s.totalAdvance,
+        s.totalPaidAll,
+        s.balance,
+        `"${statusLabel}"`,
+      ].join(',');
+    });
+
+    const titleRow = [`"Monsur Labor Audit Report: ${periodLabel}"`].join(',');
+    const csvContent =
+      'data:text/csv;charset=utf-8,\uFEFF' +
+      [titleRow, '', headers.join(','), ...rows].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    const periodSlug = `${selectedYear}_${selectedMonth}`.toLowerCase();
+    link.setAttribute('download', `monsur_labor_audit_${periodSlug}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handlePrintLedger = () => {
+    window.print();
+  };
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Download Full Backup (JSON) for complete data portability
+  const handleDownloadBackup = () => {
+    try {
+      const backupData = {
+        appName: 'MONSUR LABOR PORTAL',
+        appNameBn: 'মনসুর লেবার পোর্টাল',
+        version: '1.0.0',
+        exportedAt: new Date().toISOString(),
+        summary: {
+          totalWorkers: workers.length,
+          totalRecords: records.length,
+          availableYears: availableYears,
+        },
+        workers: workers,
+        records: records,
       };
-    });
-  }, [workers, records, selectedMonth, selectedYear]);
 
-  const filteredSummaries = useMemo(() => {
-    return workerSummaries.filter(item => {
-      const matchesSearch = item.worker.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.worker.trade.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            item.worker.phone.includes(searchQuery);
-      
-      if (filterStatus === 'all') return matchesSearch;
-      return matchesSearch && item.status === filterStatus;
-    });
-  }, [workerSummaries, searchQuery, filterStatus]);
+      const jsonString = JSON.stringify(backupData, null, 2);
+      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      link.download = `monsur_labor_portal_full_backup_${dateStr}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Failed to export backup', err);
+      alert('ব্যাকআপ ফাইল তৈরিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    }
+  };
 
-  const grandTotalEarned = workerSummaries.reduce((sum, i) => sum + i.totalEarned, 0);
-  const grandTotalPaid = workerSummaries.reduce((sum, i) => sum + i.totalPaidAll, 0);
+  // Restore Backup (JSON) for full data portability
+  const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#030712] text-white flex items-center justify-center text-xl">
-        লোড হচ্ছে...
-      </div>
-    );
-  }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const data = JSON.parse(text);
 
-  if (!user) {
-    return (
-      <div className="relative min-h-screen bg-[#030712] text-[#e6f1ff] flex items-center justify-center p-4">
-        <div id="three-bg" className="fixed inset-0 pointer-events-none z-0" />
-        <div className="relative z-10 bg-slate-900/80 backdrop-blur-md p-8 rounded-3xl shadow-2xl border border-cyan-500/30 w-full max-w-md">
-          <h2 className="text-2xl font-bold mb-6 text-center text-cyan-400">লগইন করুন (Monsur Portal)</h2>
-          {error && <div className="bg-red-500/20 border border-red-500 text-red-300 p-3 rounded-xl mb-4 text-sm">{error}</div>}
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs mb-1 text-slate-300">ইমেইল এড্রেস</label>
-              <input 
-                type="email" 
-                value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                className="w-full bg-black/50 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-cyan-400 text-xs"
-                placeholder="admin@example.com"
-              />
-            </div>
-            <div>
-              <label className="block text-xs mb-1 text-slate-300">পাসওয়ার্ড</label>
-              <input 
-                type="password" 
-                value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full bg-black/50 border border-slate-700 rounded-xl p-3 text-white focus:outline-none focus:border-cyan-400 text-xs"
-                placeholder="********"
-              />
-            </div>
-            <button 
-              type="submit"
-              className="w-full bg-cyan-500 hover:bg-cyan-400 text-black font-bold p-3 rounded-xl transition duration-200 text-xs cursor-pointer"
-            >
-              প্রবেশ করুন
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
+        if (!data || !Array.isArray(data.workers) || !Array.isArray(data.records)) {
+          alert('ত্রুটি: ব্যাকআপ ফাইলটির ফরম্যাট সঠিক নয়। "workers" এবং "records" ডাটা পাওয়া যায়নি।');
+          return;
+        }
+
+        if (
+          confirm(
+            `আপনি কি ব্যাকআপ ফাইলটি রিস্টোর করতে চান?\n\nএতে বর্তমান ডাটার স্থানে ব্যাকআপের ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেন লোড হবে।`
+          )
+        ) {
+          setWorkers(data.workers);
+          setRecords(data.records);
+          replaceAllCloudData(data.workers, data.records).catch((err) =>
+            console.error('Cloud restore sync error:', err)
+          );
+          alert(`সফলভাবে ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেনের ব্যাকআপ রিস্টোর ও ক্লাউড সিঙ্ক সম্পন্ন হয়েছে!`);
+        }
+      } catch (err) {
+        console.error('Failed to parse backup JSON file', err);
+        alert('ত্রুটি: ফাইলটি পড়তে ব্যর্থ হয়েছে। দয়া করে সঠিক JSON ব্যাকআপ ফাইল নির্বাচন করুন।');
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const activeDetailSummary =
+    periodSummaries.find((s) => s.worker.id === activeDetailWorkerId) || null;
+  const activeDetailWorker =
+    workers.find((w) => w.id === activeDetailWorkerId) || activeDetailSummary?.worker || null;
+  const activeEditWorker = workers.find((w) => w.id === activeEditWorkerId) || null;
 
   return (
-    <div className="relative min-h-screen bg-[#030712] text-slate-100 font-sans overflow-x-hidden selection:bg-cyan-500 selection:text-black">
-      <div id="three-bg" className="fixed inset-0 pointer-events-none z-0" />
+    <div className="relative min-h-screen text-[#e6f1ff] pb-16">
+      <ThreeBackground />
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-6">
-        
-        {/* Header Section */}
-        <header className="flex flex-col md:flex-row items-center justify-between gap-4 p-5 rounded-3xl bg-slate-900/60 backdrop-blur-md border border-cyan-500/30 shadow-[0_0_30px_rgba(0,242,254,0.1)] mb-6">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30 text-black font-black text-xl">
-              ML
-            </div>
-            <div>
-              <h1 className="text-xl font-black tracking-wider text-white uppercase flex items-center gap-2">
-                মনসুর লেবার পোর্টাল <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">2-Hajira Hub</span>
-              </h1>
-              <p className="text-xs text-slate-400">সকাল ও বিকাল দুই শিফট হাজিরা ব্যবস্থাপনা সিস্টেম</p>
-            </div>
+      <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
+        <header className="text-center mb-6 px-2">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs sm:text-sm mb-3 shadow-[0_0_20px_rgba(0,242,254,0.25)] font-semibold">
+            <Building2 className="w-4 h-4 text-[#00f2fe]" />
+            <span className="tracking-wider">মনসুর লেবার কন্ট্রোল সিস্টেম</span>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
-            <select 
-              value={selectedMonth} 
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              className="bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-cyan-300 focus:outline-none focus:border-cyan-400"
-            >
-              {BANGLA_MONTHS.map((m, idx) => (
-                <option key={idx} value={idx + 1} className="bg-slate-900 text-white">{m}</option>
-              ))}
-            </select>
+          <h1 className="font-orbitron text-2xl sm:text-4xl md:text-5xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] via-[#4facfe] to-[#00f2fe] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(0,242,254,0.5)] leading-tight">
+            MONSUR LABOR PORTAL
+          </h1>
 
-            <select 
-              value={selectedYear} 
-              onChange={(e) => setSelectedYear(Number(e.target.value))}
-              className="bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-cyan-300 focus:outline-none focus:border-cyan-400"
-            >
-              {[2024, 2025, 2026, 2027].map(y => (
-                <option key={y} value={y} className="bg-slate-900 text-white">{y}</option>
-              ))}
-            </select>
+          <div className="text-base sm:text-xl font-bold text-[#00f2fe] tracking-wide mt-1.5 font-bengali">
+            মনসুর লেবার পোর্টাল
+          </div>
 
-            <button 
+          <p className="text-slate-300 text-sm sm:text-base mt-2 max-w-2xl mx-auto font-medium px-1">
+            বাৎসরিক ও মাসিক হিসাব অডিট, দৈনিক হাজিরা এন্ট্রি ও অগ্রিম ব্যালেন্স ব্যবস্থাপনা
+          </p>
+
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-slate-400 no-print">
+            <div
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-semibold transition-all ${
+                cloudSyncStatus === 'connected'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
+                  : cloudSyncStatus === 'syncing'
+                  ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 animate-pulse'
+                  : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+              }`}
+              title="মোবাইল এবং কম্পিউটারে রিয়েল-টাইম অটোমেটিক ডেটা সিঙ্ক হচ্ছে"
+            >
+              <span className="relative flex h-2.5 w-2.5">
+                {cloudSyncStatus === 'connected' ? (
+                  <>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+                  </>
+                ) : cloudSyncStatus === 'syncing' ? (
+                  <span className="animate-spin h-2.5 w-2.5 rounded-full border-2 border-cyan-400 border-t-transparent"></span>
+                ) : (
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
+                )}
+              </span>
+              <Cloud className="w-4 h-4 shrink-0" />
+              <span>
+                {cloudSyncStatus === 'connected'
+                  ? 'মোবাইল ও পিসি অটো-সিঙ্ক সক্রিয়'
+                  : cloudSyncStatus === 'syncing'
+                  ? 'ক্লাউড সিঙ্ক হচ্ছে...'
+                  : 'অফলাইন মোড (লোকাল সেভ)'}
+              </span>
+              <div className="hidden sm:flex items-center gap-1 text-[11px] opacity-80 border-l border-white/20 pl-2">
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>↔</span>
+                <Laptop className="w-3.5 h-3.5" />
+              </div>
+            </div>
+
+            {currentTime && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-slate-300">
+                <Clock className="w-4 h-4 text-[#00f2fe]" />
+                <span className="text-xs sm:text-sm">{currentTime}</span>
+              </span>
+            )}
+
+            <button
               onClick={() => setShowRoadmapModal(true)}
-              className="px-3 py-2 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 text-xs font-semibold transition cursor-pointer"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-semibold transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] cursor-pointer text-xs sm:text-sm"
+              title="নতুন যেসব ফিচার যুক্ত করা যাবে"
             >
-              💡 রোডম্যাপ
+              <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
+              <span>নতুন ফিচারের আইডিয়া</span>
             </button>
 
-            <button 
-              onClick={handleLogout}
-              className="bg-rose-600/80 hover:bg-rose-500 text-white px-3 py-2 rounded-xl text-xs font-semibold transition cursor-pointer"
+            <button
+              onClick={handleDownloadBackup}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-semibold transition-all shadow-[0_0_15px_rgba(0,242,254,0.2)] cursor-pointer text-xs sm:text-sm"
+              title="শ্রমিক ও সমস্ত লেনদেনের সম্পূর্ণ ডাটা JSON ফাইল হিসেবে ব্যাকআপ ডাউনলোড করুন"
+              id="download-full-backup-btn"
             >
-              লগআউট
+              <Download className="w-4 h-4 text-[#00f2fe] shrink-0" />
+              <span>সম্পূর্ণ ব্যাকআপ ডাউনলোড (JSON)</span>
             </button>
+
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer text-xs sm:text-sm"
+              title="পূর্বে সংরক্ষিত JSON ব্যাকআপ ফাইল থেকে ডাটা রিস্টোর করুন"
+              id="restore-backup-btn"
+            >
+              <Upload className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>ব্যাকআপ রিস্টোর</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={handleRestoreBackup}
+              className="hidden"
+            />
+
+            <button
+              onClick={handleResetData}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer text-xs sm:text-sm"
+              title="ডেমো ডেটা রিলোড করুন"
+            >
+              <RotateCcw className="w-4 h-4 text-cyan-300 shrink-0" />
+              <span>ডেমো ডেটা রিস্টোর</span>
+            </button>
+
+            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs sm:text-sm">
+              <ShieldCheck className="w-4 h-4 shrink-0" />
+              <span>রিয়েল-টাইম স্টোরেজ সিঙ্ক</span>
+            </span>
           </div>
         </header>
 
-        {/* Top Overview Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-          <div className="p-4 rounded-2xl bg-slate-900/40 backdrop-blur border border-white/10 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-400">মোট শ্রমিক সংখ্যা</p>
-              <h3 className="text-2xl font-bold text-cyan-400 mt-1">{workers.length} জন</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center text-cyan-400 text-lg">👷</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-900/40 backdrop-blur border border-white/10 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-400">এই মাসের মোট অর্জিত পাওনা</p>
-              <h3 className="text-2xl font-bold text-emerald-400 mt-1">৳{grandTotalEarned}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400 text-lg">📈</div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-slate-900/40 backdrop-blur border border-white/10 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-slate-400">এই মাসে মোট পরিশোধ</p>
-              <h3 className="text-2xl font-bold text-rose-400 mt-1">৳{grandTotalPaid}</h3>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-400 text-lg">💸</div>
-          </div>
+        <div className="no-print">
+          <YearMonthFilter
+            availableYears={availableYears}
+            selectedYear={selectedYear}
+            selectedMonth={selectedMonth}
+            currentYearSummary={currentYearSummary}
+            onSelectYear={(yr) => {
+              setSelectedYear(yr);
+            }}
+            onSelectMonth={(m) => setSelectedMonth(m)}
+            showAnalytics={showAnalytics}
+            onToggleAnalytics={() => setShowAnalytics(!showAnalytics)}
+          />
         </div>
 
-        {/* Forms Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Add Worker Form */}
-          <div className="p-5 rounded-2xl bg-slate-900/60 backdrop-blur border border-white/10">
-            <h3 className="text-sm font-bold text-cyan-300 mb-3 flex items-center gap-2">
-              <span>➕</span> নতুন শ্রমিক নিবন্ধন করুন
-            </h3>
-            <form onSubmit={handleAddWorker} className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">শ্রমিকের নাম</label>
-                <input 
-                  type="text" 
-                  placeholder="যেমন: জামাল উদ্দিন" 
-                  value={newWorkerName}
-                  onChange={(e) => setNewWorkerName(e.target.value)}
-                  required
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">কাজের ধরণ / ট্রেড</label>
-                <input 
-                  type="text" 
-                  placeholder="যেমন: রাজমিস্ত্রি" 
-                  value={newWorkerTrade}
-                  onChange={(e) => setNewWorkerTrade(e.target.value)}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">মোবাইল নম্বর</label>
-                <input 
-                  type="text" 
-                  placeholder="017xxxxxxxx" 
-                  value={newWorkerPhone}
-                  onChange={(e) => setNewWorkerPhone(e.target.value)}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">দৈনিক মজুরি (টাকা)</label>
-                <input 
-                  type="number" 
-                  value={newWorkerWage}
-                  onChange={(e) => setNewWorkerWage(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                className="col-span-1 sm:col-span-2 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-black font-bold text-xs rounded-xl transition cursor-pointer mt-1"
-              >
-                শ্রমিক সংরক্ষণ করুন
-              </button>
-            </form>
-          </div>
-
-          {/* Add Attendance & Payment Form (2 Shifts: Morning & Evening) */}
-          <div className="p-5 rounded-2xl bg-slate-900/60 backdrop-blur border border-white/10">
-            <h3 className="text-sm font-bold text-emerald-300 mb-3 flex items-center gap-2">
-              <span>📝</span> দুই শিফটে হাজিরা ও লেনদেন এন্ট্রি
-            </h3>
-            <form onSubmit={handleAddRecord} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="col-span-2 sm:col-span-2">
-                <label className="text-[11px] text-slate-400 block mb-1">শ্রমিক নির্বাচন</label>
-                <select 
-                  value={entryWorkerId}
-                  onChange={(e) => setEntryWorkerId(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                >
-                  {workers.map(w => (
-                    <option key={w.id} value={w.id}>{w.name} ({w.trade})</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="col-span-2 sm:col-span-2">
-                <label className="text-[11px] text-slate-400 block mb-1">তারিখ</label>
-                <input 
-                  type="date" 
-                  value={entryDate}
-                  onChange={(e) => setEntryDate(e.target.value)}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              {/* সকালের হাজিরা */}
-              <div className="col-span-1 sm:col-span-2">
-                <label className="text-[11px] text-cyan-300 block mb-1">🌅 সকালের হাজিরা</label>
-                <select
-                  value={morningDays}
-                  onChange={(e) => setMorningDays(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                >
-                  <option value={0.5}>০.৫ দিন (অর্ধবেলা)</option>
-                  <option value={0}>০ দিন (অনুপস্থিত)</option>
-                </select>
-              </div>
-
-              {/* বিকালের হাজিরা */}
-              <div className="col-span-1 sm:col-span-2">
-                <label className="text-[11px] text-amber-300 block mb-1">🌇 বিকালের হাজিরা</label>
-                <select
-                  value={eveningDays}
-                  onChange={(e) => setEveningDays(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                >
-                  <option value={0.5}>০.৫ দিন (অর্ধবেলা)</option>
-                  <option value={0}>০ দিন (অনুপস্থিত)</option>
-                </select>
-              </div>
-
-              <div className="col-span-1 sm:col-span-2">
-                <label className="text-[11px] text-slate-400 block mb-1">পরিশোধ (টাকা)</label>
-                <input 
-                  type="number" 
-                  value={entryPaid}
-                  onChange={(e) => setEntryPaid(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="col-span-1 sm:col-span-2">
-                <label className="text-[11px] text-slate-400 block mb-1">অগ্রিম (টাকা)</label>
-                <input 
-                  type="number" 
-                  value={entryAdvance}
-                  onChange={(e) => setEntryAdvance(Number(e.target.value))}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div className="col-span-2 sm:col-span-4">
-                <label className="text-[11px] text-slate-400 block mb-1">মন্তব্য / নোট</label>
-                <input 
-                  type="text" 
-                  placeholder="যেমন: সকালে অর্ধেক ও বিকালে পূর্ণ কাজ" 
-                  value={entryRemarks}
-                  onChange={(e) => setEntryRemarks(e.target.value)}
-                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 mb-2"
-                />
-              </div>
-
-              <button 
-                type="submit" 
-                className="col-span-2 sm:col-span-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold text-xs rounded-xl transition cursor-pointer mt-1"
-              >
-                হাজিরা ও লেনদেন সংরক্ষণ করুন
-              </button>
-            </form>
-          </div>
-        </div>
-
-        {/* Search & Filter Toolbar */}
-        <div className="p-4 rounded-2xl bg-slate-900/60 backdrop-blur border border-white/10 mb-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="w-full sm:w-72">
-            <input
-              type="text"
-              placeholder="🔍 শ্রমিক খুঁজুন (নাম, ট্রেড বা ফোন)..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-black/60 border border-white/20 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+        {showAnalytics && currentYearSummary && (
+          <div className="no-print">
+            <YearlyMonthlyDashboard
+              yearSummary={currentYearSummary}
+              selectedMonth={selectedMonth}
+              onSelectMonth={(m) => setSelectedMonth(m)}
+              onClose={() => setShowAnalytics(false)}
             />
           </div>
-
-          <div className="flex items-center gap-1.5 flex-wrap w-full sm:w-auto">
-            {[
-              { id: 'all', label: 'সকল শ্রমিক' },
-              { id: 'due', label: 'বকেয়া পাওনা' },
-              { id: 'claim', label: 'কোম্পানি দাবি' },
-              { id: 'settled', label: 'পরিশোধিত' }
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setFilterStatus(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer ${
-                  filterStatus === tab.id
-                    ? 'bg-cyan-500/20 border border-cyan-400 text-cyan-300'
-                    : 'bg-black/40 border border-white/10 text-slate-400 hover:text-white'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Workers List Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredSummaries.map(item => (
-            <div key={item.worker.id} className="p-4 rounded-2xl bg-slate-900/60 backdrop-blur border border-white/10 hover:border-cyan-500/40 transition flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div>
-                    <h4 className="font-bold text-base text-white">{item.worker.name}</h4>
-                    <div className="text-xs text-cyan-400 font-medium">{item.worker.trade} • ৳{item.worker.dailyWage}/দিন</div>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-                    item.status === 'due' ? 'bg-amber-500/15 border-amber-500/30 text-amber-300' :
-                    item.status === 'claim' ? 'bg-rose-500/15 border-rose-500/30 text-rose-300' :
-                    'bg-emerald-500/15 border-emerald-500/30 text-emerald-300'
-                  }`}>
-                    {item.status === 'due' ? 'বকেয়া পাওনা' : item.status === 'claim' ? 'কোম্পানি পাওনা' : 'হিসাব সমান'}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 bg-black/40 p-2.5 rounded-xl text-center my-3 border border-white/5 text-xs">
-                  <div>
-                    <div className="text-[10px] text-slate-400">মোট দিন</div>
-                    <div className="font-bold text-cyan-300">{item.totalDays} দিন</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400">অর্জিত মূল্য</div>
-                    <div className="font-bold text-emerald-400">৳{item.totalEarned}</div>
-                  </div>
-                  <div>
-                    <div className="text-[10px] text-slate-400">প্রদত্ত খরচ</div>
-                    <div className="font-bold text-rose-400">৳{item.totalPaidAll}</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-white/10 text-xs">
-                <button
-                  onClick={() => setActiveModalWorker(item)}
-                  className="text-cyan-300 hover:underline font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  📋 বিস্তারিত খতিয়ান ও রশিদ
-                </button>
-                <button
-                  onClick={() => handleDeleteWorker(item.worker.id)}
-                  className="text-rose-400 hover:text-rose-300 cursor-pointer text-xs"
-                >
-                  মুছে ফেলুন
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Worker Details Modal */}
-        {activeModalWorker && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto p-6 rounded-3xl border border-cyan-500/40 bg-[#071124] shadow-2xl">
-              <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                <div>
-                  <h3 className="text-lg font-bold text-white">{activeModalWorker.worker.name} - এর লেজার খতিয়ান</h3>
-                  <p className="text-xs text-cyan-400">{activeModalWorker.worker.trade} | ফোন: {activeModalWorker.worker.phone}</p>
-                </div>
-                <button
-                  onClick={() => setActiveModalWorker(null)}
-                  className="text-slate-400 hover:text-white px-3 py-1 rounded-lg bg-white/10 text-xs cursor-pointer"
-                >
-                  ✕ বন্ধ
-                </button>
-              </div>
-
-              <div className="space-y-2 mb-6">
-                <h5 className="text-xs font-bold text-slate-300">নির্বাচিত মাসের লেনদেন ইতিহাস ({BANGLA_MONTHS[selectedMonth - 1]} {selectedYear}):</h5>
-                {activeModalWorker.records.length === 0 ? (
-                  <p className="text-xs text-slate-500 italic py-4 text-center bg-black/30 rounded-xl">এই মাসে কোনো হাজিরা বা লেনদেন এন্ট্রি করা হয়নি।</p>
-                ) : (
-                  activeModalWorker.records.map((r: any) => (
-                    <div key={r.id} className="p-3 rounded-xl bg-black/40 border border-white/5 text-xs flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-cyan-300 mr-2">{r.date}</span>
-                        <span className="text-white font-semibold">
-                          সকাল: {r.morningDays} | বিকাল: {r.eveningDays} (মোট: {r.morningDays + r.eveningDays} দিন)
-                        </span>
-                        {r.notes && <div className="text-[11px] text-slate-400 mt-0.5">💬 {r.notes}</div>}
-                      </div>
-                      <div className="text-right">
-                        <div className="text-emerald-400">পরিশোধ: ৳{r.paid}</div>
-                        {r.advance > 0 && <div className="text-amber-400">অগ্রিম: ৳{r.advance}</div>}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setActiveModalWorker(null)}
-                  className="px-4 py-2 bg-cyan-500 text-black font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  সম্পন্ন
-                </button>
-              </div>
-            </div>
-          </div>
         )}
 
-        {/* Roadmap Modal */}
-        {showRoadmapModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-            <div className="w-full max-w-lg p-6 rounded-3xl border border-amber-500/40 bg-[#071124] shadow-2xl">
-              <h3 className="text-base font-bold text-amber-300 mb-2">💡 নতুন ফিচারের আইডিয়া ও রোডম্যাপ</h3>
-              <p className="text-xs text-slate-300 mb-4">মনসুর লেবার পোর্টাল আরও উন্নত করতে ভবিষ্যতে নিচের ফিচারগুলো যুক্ত করা যেতে পারে:</p>
-              <ul className="text-xs space-y-2 text-slate-200 list-disc pl-4 mb-5">
-                <li>সকাল ও বিকালের হাজিরা আলাদাভাবে রিপোর্ট আকারে প্রিন্ট করার সুবিধা।</li>
-                <li>হোয়াটসঅ্যাপে (WhatsApp) সরাসরি শ্রমিকদের দৈনিক হাজিরা ও পাওনার এসএমএস পাঠানো।</li>
-                <li>প্রজেক্ট বা সাইটভিত্তিক আলাদা সাব-অ্যাকাউন্ট ও বাজেট ট্র্যাকিং।</li>
-              </ul>
-              <div className="flex justify-end">
-                <button
-                  onClick={() => setShowRoadmapModal(false)}
-                  className="px-4 py-2 bg-amber-500 text-black font-bold text-xs rounded-xl cursor-pointer"
-                >
-                  বন্ধ করুন
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+        <div className="no-print">
+          <StatsCards
+            summaries={periodSummaries}
+            periodLabel={periodLabel}
+            currentYearSummary={currentYearSummary}
+            selectedYear={selectedYear}
+          />
+        </div>
 
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.35fr] gap-6 mb-8 no-print">
+          <WorkerRegistrationForm onAddWorker={handleAddWorker} />
+
+          <DailyTransactionForm
+            workers={workers}
+            onAddRecord={handleAddRecord}
+            selectedWorkerId={quickEntryWorkerId || undefined}
+            onSelectWorkerId={(id) => setQuickEntryWorkerId(id)}
+          />
+        </div>
+
+        <SummaryTable
+          summaries={periodSummaries}
+          periodLabel={periodLabel}
+          onDeleteWorker={handleDeleteWorker}
+          onOpenWorkerDetails={(id) => setActiveDetailWorkerId(id)}
+          onQuickAddRecord={(id) => {
+            setQuickEntryWorkerId(id);
+            window.scrollTo({ top: 460, behavior: 'smooth' });
+          }}
+          onEditWorker={(id) => setActiveEditWorkerId(id)}
+          onExportCsv={handleExportCsv}
+          onPrintLedger={handlePrintLedger}
+          onDownloadBackup={handleDownloadBackup}
+        />
       </div>
+
+      {(activeDetailSummary || activeDetailWorker) && (
+        <WorkerDetailModal
+          summary={activeDetailSummary || undefined}
+          worker={activeDetailWorker || undefined}
+          records={records}
+          allWorkers={workers}
+          onSelectWorker={(id) => setActiveDetailWorkerId(id)}
+          onClose={() => setActiveDetailWorkerId(null)}
+          onDeleteRecord={handleDeleteRecord}
+          onAddRecordForWorker={handleAddRecord}
+          onUpdateRecord={handleUpdateRecord}
+        />
+      )}
+
+      {activeEditWorker && (
+        <EditWorkerModal
+          worker={activeEditWorker}
+          onClose={() => setActiveEditWorkerId(null)}
+          onSave={handleUpdateWorker}
+        />
+      )}
+
+      {showRoadmapModal && (
+        <FutureRoadmapModal onClose={() => setShowRoadmapModal(false)} />
+      )}
     </div>
   );
 }
