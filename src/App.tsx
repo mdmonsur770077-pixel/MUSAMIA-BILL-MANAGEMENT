@@ -30,7 +30,8 @@ interface RecordEntry {
   id: number;
   workerId: number;
   date: string;
-  days: number;
+  morningDays: number; // সকালের হাজিরা
+  eveningDays: number; // বিকালের হাজিরা
   paid: number;
   advance: number;
   notes: string;
@@ -55,8 +56,8 @@ export default function App() {
   ]);
 
   const [records, setRecords] = useState<RecordEntry[]>([
-    { id: 101, workerId: 1, date: '2026-09-01', days: 1, paid: 500, advance: 0, notes: 'নিয়মিত হাজিরা' },
-    { id: 102, workerId: 2, date: '2026-09-01', days: 1, paid: 400, advance: 50, notes: 'জরুরি অগ্রিম' }
+    { id: 101, workerId: 1, date: '2026-09-01', morningDays: 0.5, eveningDays: 0.5, paid: 500, advance: 0, notes: 'পূর্ণ দিন' },
+    { id: 102, workerId: 2, date: '2026-09-01', morningDays: 0.5, eveningDays: 0, paid: 400, advance: 50, notes: 'অর্ধবেলা' }
   ]);
 
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth() + 1);
@@ -70,7 +71,8 @@ export default function App() {
 
   const [entryWorkerId, setEntryWorkerId] = useState<number>(1);
   const [entryDate, setEntryDate] = useState<string>(new Date().toISOString().split('T')[0]);
-  const [entryDays, setEntryDays] = useState<number>(1);
+  const [morningDays, setMorningDays] = useState<number>(0.5);
+  const [eveningDays, setEveningDays] = useState<number>(0.5);
   const [entryPaid, setEntryPaid] = useState<number>(0);
   const [entryAdvance, setEntryAdvance] = useState<number>(0);
   const [entryRemarks, setEntryRemarks] = useState('');
@@ -88,7 +90,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Three.js ব্যাকগ্রাউন্ড অ্যানিমেশন ইফেক্ট (লগইন বা ড্যাশবোর্ড উভয়ের জন্য)
+  // Three.js ব্যাকগ্রাউন্ড অ্যানিমেশন ইফেক্ট
   useEffect(() => {
     const container = document.getElementById('three-bg');
     if (!container) return;
@@ -173,7 +175,8 @@ export default function App() {
       id: Date.now(),
       workerId: Number(entryWorkerId),
       date: entryDate,
-      days: Number(entryDays),
+      morningDays: Number(morningDays),
+      eveningDays: Number(eveningDays),
       paid: Number(entryPaid),
       advance: Number(entryAdvance),
       notes: entryRemarks
@@ -183,7 +186,7 @@ export default function App() {
     setEntryPaid(0);
     setEntryAdvance(0);
     setEntryRemarks('');
-    alert('হাজিরা ও লেনদেন সফলভাবে সংরক্ষণ করা হয়েছে!');
+    alert('সকাল ও বিকালের হাজিরাসহ লেনদেন সফলভাবে সংরক্ষণ করা হয়েছে!');
   };
 
   const handleDeleteWorker = (workerId: number) => {
@@ -202,7 +205,8 @@ export default function App() {
                rDate.getFullYear() === selectedYear;
       });
 
-      const totalDays = workerRecords.reduce((sum, r) => sum + r.days, 0);
+      // মোট দিন = সকালের হাজিরা + বিকালের হাজিরা যোগফল
+      const totalDays = workerRecords.reduce((sum, r) => sum + r.morningDays + r.eveningDays, 0);
       const totalEarned = totalDays * worker.dailyWage;
       const totalPaidOnly = workerRecords.reduce((sum, r) => sum + r.paid, 0);
       const totalAdvanceOnly = workerRecords.reduce((sum, r) => sum + r.advance, 0);
@@ -303,9 +307,9 @@ export default function App() {
             </div>
             <div>
               <h1 className="text-xl font-black tracking-wider text-white uppercase flex items-center gap-2">
-                মনসুর লেবার পোর্টাল <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">3D Hub</span>
+                মনসুর লেবার পোর্টাল <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">2-Hajira Hub</span>
               </h1>
-              <p className="text-xs text-slate-400">স্মার্ট লেবার কন্ট্রোল ও দৈনিক হিসাব ব্যবস্থাপনা সিস্টেম</p>
+              <p className="text-xs text-slate-400">সকাল ও বিকাল দুই শিফট হাজিরা ব্যবস্থাপনা সিস্টেম</p>
             </div>
           </div>
 
@@ -434,13 +438,13 @@ export default function App() {
             </form>
           </div>
 
-          {/* Add Attendance & Payment Form */}
+          {/* Add Attendance & Payment Form (2 Shifts: Morning & Evening) */}
           <div className="p-5 rounded-2xl bg-slate-900/60 backdrop-blur border border-white/10">
             <h3 className="text-sm font-bold text-emerald-300 mb-3 flex items-center gap-2">
-              <span>📝</span> দৈনিক হাজিরা ও লেনদেন এন্ট্রি
+              <span>📝</span> দুই শিফটে হাজিরা ও লেনদেন এন্ট্রি
             </h3>
-            <form onSubmit={handleAddRecord} className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="col-span-2 sm:col-span-1">
+            <form onSubmit={handleAddRecord} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-2">
                 <label className="text-[11px] text-slate-400 block mb-1">শ্রমিক নির্বাচন</label>
                 <select 
                   value={entryWorkerId}
@@ -453,7 +457,7 @@ export default function App() {
                 </select>
               </div>
 
-              <div>
+              <div className="col-span-2 sm:col-span-2">
                 <label className="text-[11px] text-slate-400 block mb-1">তারিখ</label>
                 <input 
                   type="date" 
@@ -463,20 +467,33 @@ export default function App() {
                 />
               </div>
 
-              <div>
-                <label className="text-[11px] text-slate-400 block mb-1">হাজিরা (দিন)</label>
-                <input 
-                  type="number" 
-                  step="0.5" 
-                  min="0" 
-                  max="1" 
-                  value={entryDays}
-                  onChange={(e) => setEntryDays(Number(e.target.value))}
+              {/* সকালের হাজিরা */}
+              <div className="col-span-1 sm:col-span-2">
+                <label className="text-[11px] text-cyan-300 block mb-1">🌅 সকালের হাজিরা</label>
+                <select
+                  value={morningDays}
+                  onChange={(e) => setMorningDays(Number(e.target.value))}
                   className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
-                />
+                >
+                  <option value={0.5}>০.৫ দিন (অর্ধবেলা)</option>
+                  <option value={0}>০ দিন (অনুপস্থিত)</option>
+                </select>
               </div>
 
-              <div>
+              {/* বিকালের হাজিরা */}
+              <div className="col-span-1 sm:col-span-2">
+                <label className="text-[11px] text-amber-300 block mb-1">🌇 বিকালের হাজিরা</label>
+                <select
+                  value={eveningDays}
+                  onChange={(e) => setEveningDays(Number(e.target.value))}
+                  className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400"
+                >
+                  <option value={0.5}>০.৫ দিন (অর্ধবেলা)</option>
+                  <option value={0}>০ দিন (অনুপস্থিত)</option>
+                </select>
+              </div>
+
+              <div className="col-span-1 sm:col-span-2">
                 <label className="text-[11px] text-slate-400 block mb-1">পরিশোধ (টাকা)</label>
                 <input 
                   type="number" 
@@ -486,7 +503,7 @@ export default function App() {
                 />
               </div>
 
-              <div>
+              <div className="col-span-1 sm:col-span-2">
                 <label className="text-[11px] text-slate-400 block mb-1">অগ্রিম (টাকা)</label>
                 <input 
                   type="number" 
@@ -496,33 +513,20 @@ export default function App() {
                 />
               </div>
 
-              <div className="col-span-2 sm:col-span-3">
+              <div className="col-span-2 sm:col-span-4">
                 <label className="text-[11px] text-slate-400 block mb-1">মন্তব্য / নোট</label>
                 <input 
                   type="text" 
-                  placeholder="যেমন: সাইট এ অতিরিক্ত কাজ" 
+                  placeholder="যেমন: সকালে অর্ধেক ও বিকালে পূর্ণ কাজ" 
                   value={entryRemarks}
                   onChange={(e) => setEntryRemarks(e.target.value)}
                   className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-cyan-400 mb-2"
                 />
-                
-                <div className="flex gap-1.5 flex-wrap">
-                  {['সঠিক কাজ', 'অতিরিক্ত সময়', 'উচ্চ মানের ফিডব্যাক', 'জরুরি অগ্রিম প্রদান'].map((tag, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => setEntryRemarks(tag)}
-                      className="text-[10px] px-2 py-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-slate-300 transition cursor-pointer"
-                    >
-                      {tag}
-                    </button>
-                  ))}
-                </div>
               </div>
 
               <button 
                 type="submit" 
-                className="col-span-2 sm:col-span-3 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold text-xs rounded-xl transition cursor-pointer mt-1"
+                className="col-span-2 sm:col-span-4 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-black font-bold text-xs rounded-xl transition cursor-pointer mt-1"
               >
                 হাজিরা ও লেনদেন সংরক্ষণ করুন
               </button>
@@ -586,7 +590,7 @@ export default function App() {
                 <div className="grid grid-cols-3 gap-2 bg-black/40 p-2.5 rounded-xl text-center my-3 border border-white/5 text-xs">
                   <div>
                     <div className="text-[10px] text-slate-400">মোট দিন</div>
-                    <div className="font-bold text-cyan-300">{item.totalDays}</div>
+                    <div className="font-bold text-cyan-300">{item.totalDays} দিন</div>
                   </div>
                   <div>
                     <div className="text-[10px] text-slate-400">অর্জিত মূল্য</div>
@@ -643,7 +647,9 @@ export default function App() {
                     <div key={r.id} className="p-3 rounded-xl bg-black/40 border border-white/5 text-xs flex items-center justify-between gap-2">
                       <div>
                         <span className="text-cyan-300 mr-2">{r.date}</span>
-                        <span className="text-white font-semibold">হাজিরা: {r.days} দিন</span>
+                        <span className="text-white font-semibold">
+                          সকাল: {r.morningDays} | বিকাল: {r.eveningDays} (মোট: {r.morningDays + r.eveningDays} দিন)
+                        </span>
                         {r.notes && <div className="text-[11px] text-slate-400 mt-0.5">💬 {r.notes}</div>}
                       </div>
                       <div className="text-right">
@@ -674,8 +680,8 @@ export default function App() {
               <h3 className="text-base font-bold text-amber-300 mb-2">💡 নতুন ফিচারের আইডিয়া ও রোডম্যাপ</h3>
               <p className="text-xs text-slate-300 mb-4">মনসুর লেবার পোর্টাল আরও উন্নত করতে ভবিষ্যতে নিচের ফিচারগুলো যুক্ত করা যেতে পারে:</p>
               <ul className="text-xs space-y-2 text-slate-200 list-disc pl-4 mb-5">
-                <li>হোয়াটসঅ্যাপে (WhatsApp) সরাসরি শ্রমিকদের দৈনিক হাজিরা ও পাওনার এসএমএস বা রিপোর্ট পাঠানো।</li>
-                <li>ক্লাউড ডাটাবেজ ইন্টিগ্রেশন (Firebase Firestore) রিয়েল-টাইম সিঙ্ক আরও নিখুঁত করা।</li>
+                <li>সকাল ও বিকালের হাজিরা আলাদাভাবে রিপোর্ট আকারে প্রিন্ট করার সুবিধা।</li>
+                <li>হোয়াটসঅ্যাপে (WhatsApp) সরাসরি শ্রমিকদের দৈনিক হাজিরা ও পাওনার এসএমএস পাঠানো।</li>
                 <li>প্রজেক্ট বা সাইটভিত্তিক আলাদা সাব-অ্যাকাউন্ট ও বাজেট ট্র্যাকিং।</li>
               </ul>
               <div className="flex justify-end">
