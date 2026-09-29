@@ -30,11 +30,10 @@ import {
   migrateLocalDataToCloudIfEmpty,
   replaceAllCloudData,
 } from './services/cloudService';
-import { auth } from './services/firebase';
+import { auth } from './lib/firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
-  // ─── Firebase Auth State ───
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState<boolean>(true);
   const [loginEmail, setLoginEmail] = useState<string>('');
@@ -42,7 +41,6 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
-  // Monitor Auth State
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -51,7 +49,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Login Handler
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginError('');
@@ -61,13 +58,12 @@ export default function App() {
       setLoginPassword('');
     } catch (err: any) {
       console.error('Login error:', err);
-      setLoginError('লগইন ব্যর্থ হয়েছে! ইমেইল বা পাসওয়ার্ড সঠিক আছে কিনা চেক করুন।');
+      setLoginError('লগইন ব্যর্থ হয়েছে! ইমেইল বা পাসওয়ার্ড চেক করুন।');
     } finally {
       setIsLoggingIn(false);
     }
   };
 
-  // Logout Handler
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -76,7 +72,6 @@ export default function App() {
     }
   };
 
-  // 1. LocalStorage synchronization matching keys
   const [workers, setWorkers] = useState<Worker[]>(() => {
     try {
       const saved = localStorage.getItem('nexus_workers');
@@ -103,16 +98,12 @@ export default function App() {
     return INITIAL_RECORDS;
   });
 
-  // Cloud sync status ('connected' | 'syncing' | 'offline')
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'connected' | 'syncing' | 'offline'>('syncing');
 
-  // Real-time Firestore Cloud Synchronization between Mobile & PC
   useEffect(() => {
     if (!currentUser) return;
 
     let isMounted = true;
-
-    // 1. Initial check: If cloud is completely empty, migrate local data up
     const localWorkersRaw = localStorage.getItem('nexus_workers');
     const localRecordsRaw = localStorage.getItem('nexus_records');
     let localW = INITIAL_WORKERS;
@@ -127,14 +118,13 @@ export default function App() {
         if (Array.isArray(parsedR) && parsedR.length > 0) localR = parsedR;
       }
     } catch (e) {
-      console.warn('Error reading local cache for initial migration', e);
+      console.warn('Error reading local cache', e);
     }
 
     migrateLocalDataToCloudIfEmpty(localW, localR).catch((err) => {
       console.warn('Cloud migration check notice:', err);
     });
 
-    // 2. Real-time Workers subscription
     const unsubWorkers = subscribeToWorkers(
       (cloudWorkers) => {
         if (!isMounted) return;
@@ -147,7 +137,6 @@ export default function App() {
       }
     );
 
-    // 3. Real-time Records subscription
     const unsubRecords = subscribeToRecords(
       (cloudRecords) => {
         if (!isMounted) return;
@@ -174,12 +163,11 @@ export default function App() {
     };
   }, [currentUser]);
 
-  // Keep localStorage updated as an instant offline fallback
   useEffect(() => {
     try {
       localStorage.setItem('nexus_workers', JSON.stringify(workers));
     } catch (e) {
-      console.error('Error saving workers to localStorage', e);
+      console.error('Error saving workers', e);
     }
   }, [workers]);
 
@@ -187,18 +175,16 @@ export default function App() {
     try {
       localStorage.setItem('nexus_records', JSON.stringify(records));
     } catch (e) {
-      console.error('Error saving records to localStorage', e);
+      console.error('Error saving records', e);
     }
   }, [records]);
 
-  // Modals & Active selections
   const [activeDetailWorkerId, setActiveDetailWorkerId] = useState<string | null>(null);
   const [activeEditWorkerId, setActiveEditWorkerId] = useState<string | null>(null);
   const [quickEntryWorkerId, setQuickEntryWorkerId] = useState<string | null>(null);
   const [showRoadmapModal, setShowRoadmapModal] = useState(false);
   const [showAnalytics, setShowAnalytics] = useState(false);
 
-  // Time display
   const [currentTime, setCurrentTime] = useState('');
   useEffect(() => {
     const updateTime = () => {
@@ -217,12 +203,10 @@ export default function App() {
     return () => clearInterval(timer);
   }, []);
 
-  // 2. Yearly & Monthly Breakdown Computation
   const { availableYears, yearSummaries } = useMemo(() => {
     return computeYearlyMonthlyData(workers, records);
   }, [workers, records]);
 
-  // Filter State: Year and Month
   const defaultYear = availableYears.length > 0 ? availableYears[0] : new Date().getFullYear();
   const [selectedYear, setSelectedYear] = useState<number | 'all'>(defaultYear);
   const [selectedMonth, setSelectedMonth] = useState<number | 'all'>('all');
@@ -238,7 +222,6 @@ export default function App() {
     return yearSummaries.find((y) => y.year === yr);
   }, [yearSummaries, selectedYear, availableYears]);
 
-  // 3. Computed Summaries for current period
   const periodSummaries: WorkerSummary[] = useMemo(() => {
     return filterSummariesByPeriod(workers, records, selectedYear, selectedMonth);
   }, [workers, records, selectedYear, selectedMonth]);
@@ -250,7 +233,6 @@ export default function App() {
     return `${BANGLA_MONTHS[selectedMonth - 1]} ${yrText} (মাসিক হিসাব)`;
   }, [selectedYear, selectedMonth]);
 
-  // Handler: Add worker
   const handleAddWorker = (newWorkerData: Omit<Worker, 'id' | 'createdAt'>) => {
     const newWorker: Worker = {
       ...newWorkerData,
@@ -259,34 +241,31 @@ export default function App() {
     };
     setWorkers((prev) => [newWorker, ...prev]);
     setQuickEntryWorkerId(newWorker.id);
-    saveWorkerToCloud(newWorker).catch((err) => console.error('Cloud save worker error:', err));
+    saveWorkerToCloud(newWorker).catch((err) => console.error(err));
   };
 
-  // Handler: Update worker
   const handleUpdateWorker = (updatedWorker: Worker) => {
     setWorkers((prev) => prev.map((w) => (w.id === updatedWorker.id ? updatedWorker : w)));
-    saveWorkerToCloud(updatedWorker).catch((err) => console.error('Cloud update worker error:', err));
+    saveWorkerToCloud(updatedWorker).catch((err) => console.error(err));
   };
 
-  // Handler: Delete worker and their records
   const handleDeleteWorker = (workerId: string) => {
     const worker = workers.find((w) => w.id === workerId);
     const workerName = worker ? worker.name : 'এই লেবার';
-    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর যাবতীয় তথ্য ও হিসাব মুছে ফেলতে চান?`)) {
+    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর সমস্ত তথ্য মুছে ফেলতে চান?`)) {
       setWorkers((prev) => prev.filter((w) => w.id !== workerId));
       setRecords((prev) => prev.filter((r) => r.workerId !== workerId));
       if (activeDetailWorkerId === workerId) setActiveDetailWorkerId(null);
       if (activeEditWorkerId === workerId) setActiveEditWorkerId(null);
       if (quickEntryWorkerId === workerId) setQuickEntryWorkerId(null);
-      deleteWorkerFromCloud(workerId).catch((err) => console.error('Cloud delete worker error:', err));
+      deleteWorkerFromCloud(workerId).catch((err) => console.error(err));
     }
   };
 
-  // Handler: Add transaction record
   const handleAddRecord = (recordData: Omit<WorkRecord, 'id' | 'createdAt'>) => {
     const targetWorker = workers.find((w) => w.id === recordData.workerId) || (workers.length > 0 ? workers[0] : null);
     if (!targetWorker) {
-      alert('ত্রুটি: কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
+      alert('কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
       return;
     }
 
@@ -301,7 +280,6 @@ export default function App() {
     setRecords((prev) => [newRecord, ...prev]);
 
     const { year: recordYear, monthIndex: recordMonth } = parseDate(recordData.date);
-
     if (selectedYear !== 'all' && selectedYear !== recordYear) {
       setSelectedYear(recordYear);
     }
@@ -309,86 +287,50 @@ export default function App() {
       setSelectedMonth(recordMonth);
     }
 
-    saveRecordToCloud(newRecord).catch((err) => console.error('Cloud save record error:', err));
+    saveRecordToCloud(newRecord).catch((err) => console.error(err));
   };
 
-  // Handler: Delete record
   const handleDeleteRecord = (recordId: string) => {
     setRecords((prev) => prev.filter((r) => r.id !== recordId));
-    deleteRecordFromCloud(recordId).catch((err) => console.error('Cloud delete record error:', err));
+    deleteRecordFromCloud(recordId).catch((err) => console.error(err));
   };
 
-  // Handler: Update existing record
   const handleUpdateRecord = (updatedRecord: WorkRecord) => {
     setRecords((prev) => prev.map((r) => (r.id === updatedRecord.id ? updatedRecord : r)));
-    updateRecordInCloud(updatedRecord).catch((err) => console.error('Cloud update record error:', err));
+    updateRecordInCloud(updatedRecord).catch((err) => console.error(err));
   };
 
-  // Reset to initial sample data
   const handleResetData = () => {
-    if (
-      window.confirm(
-        'আপনি কি পূর্বনির্ধারিত ডেমো ডেটায় ফিরে যেতে চান? জুলাই, আগস্ট ও সেপ্টেম্বর ২০২৬-এর ডেটা রিলোড হবে।'
-      )
-    ) {
+    if (window.confirm('আপনি কি ডেমো ডেটায় ফিরে যেতে চান?')) {
       setWorkers(INITIAL_WORKERS);
       setRecords(INITIAL_RECORDS);
       localStorage.removeItem('nexus_workers');
       localStorage.removeItem('nexus_records');
-      replaceAllCloudData(INITIAL_WORKERS, INITIAL_RECORDS).catch((err) =>
-        console.error('Cloud reset error:', err)
-      );
+      replaceAllCloudData(INITIAL_WORKERS, INITIAL_RECORDS).catch((err) => console.error(err));
     }
   };
 
-  // Export CSV respecting active period
   const handleExportCsv = () => {
     if (periodSummaries.length === 0) {
       alert('এক্সপোর্ট করার জন্য কোনো ডাটা নেই');
       return;
     }
-
-    const headers = [
-      'Worker Name',
-      'Trade',
-      'Daily Wage (BDT)',
-      'Total Days',
-      'Total Earned (BDT)',
-      'Wages Paid (BDT)',
-      'Advance Given (BDT)',
-      'Total Received (BDT)',
-      'Net Balance (BDT)',
-      'Status',
-    ];
-
-    const rows = periodSummaries.map((s) => {
-      let statusLabel = 'Settled';
-      if (s.status === 'claim') statusLabel = `Company Claim (${Math.abs(s.balance)})`;
-      if (s.status === 'due') statusLabel = `Labor Due (${s.balance})`;
-
-      return [
-        `"${s.worker.name}"`,
-        `"${s.worker.trade || ''}"`,
-        s.worker.dailyWage,
-        s.totalDays,
-        s.totalEarned,
-        s.totalPaid,
-        s.totalAdvance,
-        s.totalPaidAll,
-        s.balance,
-        `"${statusLabel}"`,
-      ].join(',');
-    });
-
-    const titleRow = [`"Monsur Labor Audit Report: ${periodLabel}"`].join(',');
-    const csvContent =
-      'data:text/csv;charset=utf-8,\uFEFF' +
-      [titleRow, '', headers.join(','), ...rows].join('\n');
-    const encodedUri = encodeURI(csvContent);
+    const headers = ['Worker Name', 'Trade', 'Daily Wage', 'Total Days', 'Total Earned', 'Paid', 'Advance', 'Balance', 'Status'];
+    const rows = periodSummaries.map((s) => [
+      `"${s.worker.name}"`,
+      `"${s.worker.trade || ''}"`,
+      s.worker.dailyWage,
+      s.totalDays,
+      s.totalEarned,
+      s.totalPaid,
+      s.totalAdvance,
+      s.balance,
+      `"${s.status}"`
+    ].join(','));
+    const csvContent = 'data:text/csv;charset=utf-8,\uFEFF' + [headers.join(','), ...rows].join('\n');
     const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    const periodSlug = `${selectedYear}_${selectedMonth}`.toLowerCase();
-    link.setAttribute('download', `monsur_labor_audit_${periodSlug}.csv`);
+    link.setAttribute('href', encodeURI(csvContent));
+    link.setAttribute('download', `monsur_labor_audit.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -400,87 +342,41 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Download Full Backup (JSON)
   const handleDownloadBackup = () => {
-    try {
-      const backupData = {
-        appName: 'MONSUR LABOR PORTAL',
-        appNameBn: 'মনসুর লেবার পোর্টাল',
-        version: '1.0.0',
-        exportedAt: new Date().toISOString(),
-        summary: {
-          totalWorkers: workers.length,
-          totalRecords: records.length,
-          availableYears: availableYears,
-        },
-        workers: workers,
-        records: records,
-      };
-
-      const jsonString = JSON.stringify(backupData, null, 2);
-      const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      const dateStr = new Date().toISOString().split('T')[0];
-      link.download = `monsur_labor_portal_full_backup_${dateStr}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      console.error('Failed to export backup', err);
-      alert('ব্যাকআপ ফাইল তৈরিতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
-    }
+    const backupData = { workers, records };
+    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `backup.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  // Restore Backup (JSON)
   const handleRestoreBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const text = event.target?.result as string;
-        const data = JSON.parse(text);
-
-        if (!data || !Array.isArray(data.workers) || !Array.isArray(data.records)) {
-          alert('ত্রুটি: ব্যাকআপ ফাইলটির ফরম্যাট সঠিক নয়। "workers" এবং "records" ডাটা পাওয়া যায়নি।');
-          return;
-        }
-
-        if (
-          confirm(
-            `আপনি কি ব্যাকআপ ফাইলটি রিস্টোর করতে চান?\n\nএতে বর্তমান ডাটার স্থানে ব্যাকআপের ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেন লোড হবে।`
-          )
-        ) {
+        const data = JSON.parse(event.target?.result as string);
+        if (data.workers && data.records) {
           setWorkers(data.workers);
           setRecords(data.records);
-          replaceAllCloudData(data.workers, data.records).catch((err) =>
-            console.error('Cloud restore sync error:', err)
-          );
-          alert(`সফলভাবে ${data.workers.length} জন শ্রমিক এবং ${data.records.length} টি লেনদেনের ব্যাকআপ রিস্টোর ও ক্লাউড সিঙ্ক সম্পন্ন হয়েছে!`);
+          replaceAllCloudData(data.workers, data.records);
+          alert('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!');
         }
       } catch (err) {
-        console.error('Failed to parse backup JSON file', err);
-        alert('ত্রুটি: ফাইলটি পড়তে ব্যর্থ হয়েছে। দয়া করে সঠিক JSON ব্যাকআপ ফাইল নির্বাচন করুন।');
-      } finally {
-        if (fileInputRef.current) {
-          fileInputRef.current.value = '';
-        }
+        alert('ব্যাকআপ ফাইল পড়তে সমস্যা হয়েছে।');
       }
     };
     reader.readAsText(file);
   };
 
-  const activeDetailSummary =
-    periodSummaries.find((s) => s.worker.id === activeDetailWorkerId) || null;
-  const activeDetailWorker =
-    workers.find((w) => w.id === activeDetailWorkerId) || activeDetailSummary?.worker || null;
+  const activeDetailSummary = periodSummaries.find((s) => s.worker.id === activeDetailWorkerId) || null;
+  const activeDetailWorker = workers.find((w) => w.id === activeDetailWorkerId) || activeDetailSummary?.worker || null;
   const activeEditWorker = workers.find((w) => w.id === activeEditWorkerId) || null;
 
-  // ─── Loading Screen During Auth Initialization ───
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0d1117] text-[#00f2fe]">
@@ -493,24 +389,23 @@ export default function App() {
     );
   }
 
-  // ─── Login Screen If Not Authenticated ───
   if (!currentUser) {
     return (
       <div className="relative min-h-screen flex items-center justify-center px-4 text-[#e6f1ff]">
         <ThreeBackground />
         <div className="relative z-10 max-w-md w-full bg-slate-900/80 backdrop-blur-xl border border-[#00f2fe]/30 rounded-2xl p-6 sm:p-8 shadow-[0_0_40px_rgba(0,242,254,0.15)]">
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] mb-3 shadow-[0_0_15px_rgba(0,242,254,0.3)]">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] mb-3">
               <Lock className="w-6 h-6" />
             </div>
             <h1 className="font-orbitron text-2xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] to-[#4facfe] bg-clip-text text-transparent">
               ADMIN LOGIN
             </h1>
-            <p className="text-xs text-slate-400 mt-1 font-bengali">মনসুর লেবার পোর্টাল অ্যাক্সেস করতে লগইন করুন</p>
+            <p className="text-xs text-slate-400 mt-1">মনসুর লেবার পোর্টাল অ্যাক্সেস করতে লগইন করুন</p>
           </div>
 
           {loginError && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center font-medium">
+            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center">
               {loginError}
             </div>
           )}
@@ -526,7 +421,7 @@ export default function App() {
                   value={loginEmail}
                   onChange={(e) => setLoginEmail(e.target.value)}
                   placeholder="admin@example.com"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00f2fe] transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
                 />
               </div>
             </div>
@@ -541,7 +436,7 @@ export default function App() {
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00f2fe] transition-all"
+                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
                 />
               </div>
             </div>
@@ -549,16 +444,9 @@ export default function App() {
             <button
               type="submit"
               disabled={isLoggingIn}
-              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm tracking-wide shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 transition-all cursor-pointer flex items-center justify-center gap-2 disabled:opacity-50"
+              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 cursor-pointer flex items-center justify-center gap-2"
             >
-              {isLoggingIn ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>লগইন হচ্ছে...</span>
-                </>
-              ) : (
-                <span>লগইন করুন</span>
-              )}
+              {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>লগইন করুন</span>}
             </button>
           </form>
         </div>
@@ -566,7 +454,6 @@ export default function App() {
     );
   }
 
-  // ─── Main App View If Logged In ───
   return (
     <div className="relative min-h-screen text-[#e6f1ff] pb-16">
       <ThreeBackground />
@@ -574,124 +461,42 @@ export default function App() {
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
           <div className="flex items-center justify-between mb-3 no-print">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs sm:text-sm shadow-[0_0_20px_rgba(0,242,254,0.25)] font-semibold">
-              <Mail className="w-4 h-4 text-[#00f2fe]" />
-              <span className="tracking-wider">{currentUser.email}</span>
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
+              <Mail className="w-4 h-4" />
+              <span>{currentUser.email}</span>
             </div>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs sm:text-sm font-semibold transition-all cursor-pointer shadow-[0_0_15px_rgba(239,68,68,0.15)]"
-              title="লগআউট করুন"
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
               <span>লগআউট</span>
             </button>
           </div>
 
-          <h1 className="font-orbitron text-2xl sm:text-4xl md:text-5xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] via-[#4facfe] to-[#00f2fe] bg-clip-text text-transparent drop-shadow-[0_0_30px_rgba(0,242,254,0.5)] leading-tight">
+          <h1 className="font-orbitron text-2xl sm:text-4xl md:text-5xl font-black tracking-wide bg-gradient-to-r from-[#00f2fe] via-[#4facfe] to-[#00f2fe] bg-clip-text text-transparent">
             MONSUR LABOR PORTAL
           </h1>
 
-          <div className="text-base sm:text-xl font-bold text-[#00f2fe] tracking-wide mt-1.5 font-bengali">
-            মনসুর লেবার পোর্টাল
-          </div>
-
-          <p className="text-slate-300 text-sm sm:text-base mt-2 max-w-2xl mx-auto font-medium px-1">
-            বাৎসরিক ও মাসিক হিসাব অডিট, দৈনিক হাজিরা এন্ট্রি ও অগ্রিম ব্যালেন্স ব্যবস্থাপনা
-          </p>
-
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:gap-3 text-xs sm:text-sm text-slate-400 no-print">
-            <div
-              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-semibold transition-all ${
-                cloudSyncStatus === 'connected'
-                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300 shadow-[0_0_15px_rgba(16,185,129,0.2)]'
-                  : cloudSyncStatus === 'syncing'
-                  ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-300 animate-pulse'
-                  : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
-              }`}
-              title="মোবাইল এবং কম্পিউটারে রিয়েল-টাইম অটোমেটিক ডেটা সিঙ্ক হচ্ছে"
-            >
-              <span className="relative flex h-2.5 w-2.5">
-                {cloudSyncStatus === 'connected' ? (
-                  <>
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
-                  </>
-                ) : cloudSyncStatus === 'syncing' ? (
-                  <span className="animate-spin h-2.5 w-2.5 rounded-full border-2 border-cyan-400 border-t-transparent"></span>
-                ) : (
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400"></span>
-                )}
-              </span>
-              <Cloud className="w-4 h-4 shrink-0" />
-              <span>
-                {cloudSyncStatus === 'connected'
-                  ? 'মোবাইল ও পিসি অটো-সিঙ্ক সক্রিয়'
-                  : cloudSyncStatus === 'syncing'
-                  ? 'ক্লাউড সিঙ্ক হচ্ছে...'
-                  : 'অফলাইন মোড (লোকাল সেভ)'}
-              </span>
-              <div className="hidden sm:flex items-center gap-1 text-[11px] opacity-80 border-l border-white/20 pl-2">
-                <Smartphone className="w-3.5 h-3.5" />
-                <span>↔</span>
-                <Laptop className="w-3.5 h-3.5" />
-              </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs sm:text-sm text-slate-400 no-print">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border font-semibold ${
+              cloudSyncStatus === 'connected' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+            }`}>
+              <Cloud className="w-4 h-4" />
+              <span>{cloudSyncStatus === 'connected' ? 'ক্লাউড সিঙ্ক সক্রিয়' : 'অফলাইন মোড'}</span>
             </div>
 
-            {currentTime && (
-              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/40 border border-white/10 text-slate-300">
-                <Clock className="w-4 h-4 text-[#00f2fe]" />
-                <span className="text-xs sm:text-sm">{currentTime}</span>
-              </span>
-            )}
-
-            <button
-              onClick={() => setShowRoadmapModal(true)}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 text-amber-300 font-semibold transition-all shadow-[0_0_15px_rgba(245,158,11,0.2)] cursor-pointer text-xs sm:text-sm"
-              title="নতুন যেসব ফিচার যুক্ত করা যাবে"
-            >
-              <Lightbulb className="w-4 h-4 text-amber-400 shrink-0" />
-              <span>নতুন ফিচারের আইডিয়া</span>
+            <button onClick={handleDownloadBackup} className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 cursor-pointer">
+              ব্যাকআপ JSON
             </button>
-
-            <button
-              onClick={handleDownloadBackup}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 border border-cyan-500/40 text-cyan-300 font-semibold transition-all shadow-[0_0_15px_rgba(0,242,254,0.2)] cursor-pointer text-xs sm:text-sm"
-              title="শ্রমিক ও সমস্ত লেনদেনের সম্পূর্ণ ডাটা JSON ফাইল হিসেবে ব্যাকআপ ডাউনলোড করুন"
-              id="download-full-backup-btn"
-            >
-              <span>সম্পূর্ণ ব্যাকআপ ডাউনলোড (JSON)</span>
+            <button onClick={() => fileInputRef.current?.click()} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 cursor-pointer">
+              রিস্টোর
             </button>
+            <input ref={fileInputRef} type="file" accept=".json" onChange={handleRestoreBackup} className="hidden" />
 
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer text-xs sm:text-sm"
-              title="পূর্বে সংরক্ষিত JSON ব্যাকআপ ফাইল থেকে ডাটা রিস্টোর করুন"
-              id="restore-backup-btn"
-            >
-              <span>ব্যাকআপ রিস্টোর</span>
+            <button onClick={handleResetData} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-slate-300 cursor-pointer">
+              <RotateCcw className="w-4 h-4 inline mr-1" /> ডেমো রিসেট
             </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleRestoreBackup}
-              className="hidden"
-            />
-
-            <button
-              onClick={handleResetData}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white transition-all cursor-pointer text-xs sm:text-sm"
-              title="ডেমো ডেটা রিলোড করুন"
-            >
-              <RotateCcw className="w-4 h-4 text-cyan-300 shrink-0" />
-              <span>ডেমো ডেটা রিস্টোর</span>
-            </button>
-
-            <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs sm:text-sm">
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>রিয়েল-টাইম স্টোরেজ সিঙ্ক</span>
-            </span>
           </div>
         </header>
 
@@ -701,10 +506,8 @@ export default function App() {
             selectedYear={selectedYear}
             selectedMonth={selectedMonth}
             currentYearSummary={currentYearSummary}
-            onSelectYear={(yr) => {
-              setSelectedYear(yr);
-            }}
-            onSelectMonth={(m) => setSelectedMonth(m)}
+            onSelectYear={setSelectedYear}
+            onSelectMonth={setSelectedMonth}
             showAnalytics={showAnalytics}
             onToggleAnalytics={() => setShowAnalytics(!showAnalytics)}
           />
@@ -715,42 +518,28 @@ export default function App() {
             <YearlyMonthlyDashboard
               yearSummary={currentYearSummary}
               selectedMonth={selectedMonth}
-              onSelectMonth={(m) => setSelectedMonth(m)}
+              onSelectMonth={setSelectedMonth}
               onClose={() => setShowAnalytics(false)}
             />
           </div>
         )}
 
         <div className="no-print">
-          <StatsCards
-            summaries={periodSummaries}
-            periodLabel={periodLabel}
-            currentYearSummary={currentYearSummary}
-            selectedYear={selectedYear}
-          />
+          <StatsCards summaries={periodSummaries} periodLabel={periodLabel} currentYearSummary={currentYearSummary} selectedYear={selectedYear} />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.35fr] gap-6 mb-8 no-print">
           <WorkerRegistrationForm onAddWorker={handleAddWorker} />
-
-          <DailyTransactionForm
-            workers={workers}
-            onAddRecord={handleAddRecord}
-            selectedWorkerId={quickEntryWorkerId || undefined}
-            onSelectWorkerId={(id) => setQuickEntryWorkerId(id)}
-          />
+          <DailyTransactionForm workers={workers} onAddRecord={handleAddRecord} selectedWorkerId={quickEntryWorkerId || undefined} onSelectWorkerId={setQuickEntryWorkerId} />
         </div>
 
         <SummaryTable
           summaries={periodSummaries}
           periodLabel={periodLabel}
           onDeleteWorker={handleDeleteWorker}
-          onOpenWorkerDetails={(id) => setActiveDetailWorkerId(id)}
-          onQuickAddRecord={(id) => {
-            setQuickEntryWorkerId(id);
-            window.scrollTo({ top: 460, behavior: 'smooth' });
-          }}
-          onEditWorker={(id) => setActiveEditWorkerId(id)}
+          onOpenWorkerDetails={setActiveDetailWorkerId}
+          onQuickAddRecord={(id) => { setQuickEntryWorkerId(id); window.scrollTo({ top: 460, behavior: 'smooth' }); }}
+          onEditWorker={setActiveEditWorkerId}
           onExportCsv={handleExportCsv}
           onPrintLedger={handlePrintLedger}
           onDownloadBackup={handleDownloadBackup}
@@ -763,7 +552,7 @@ export default function App() {
           worker={activeDetailWorker || undefined}
           records={records}
           allWorkers={workers}
-          onSelectWorker={(id) => setActiveDetailWorkerId(id)}
+          onSelectWorker={setActiveDetailWorkerId}
           onClose={() => setActiveDetailWorkerId(null)}
           onDeleteRecord={handleDeleteRecord}
           onAddRecordForWorker={handleAddRecord}
@@ -772,15 +561,7 @@ export default function App() {
       )}
 
       {activeEditWorker && (
-        <EditWorkerModal
-          worker={activeEditWorker}
-          onClose={() => setActiveEditWorkerId(null)}
-          onSave={handleUpdateWorker}
-        />
-      )}
-
-      {showRoadmapModal && (
-        <FutureRoadmapModal onClose={() => setShowRoadmapModal(false)} />
+        <EditWorkerModal worker={activeEditWorker} onClose={() => setActiveEditWorkerId(null)} onSave={handleUpdateWorker} />
       )}
     </div>
   );
