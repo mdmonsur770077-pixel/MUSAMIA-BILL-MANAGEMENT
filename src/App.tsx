@@ -24,6 +24,9 @@ export default function App() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // State gulo ekhane add kore nite paren jehutu apnar app e lagbe (jemon labor list, form data, etc.)
+  // const [laborList, setLaborList] = useState([]);
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -100,6 +103,7 @@ export default function App() {
     );
   }
 
+  // Jodi user login thake, tahole nicher main dashboard / portal screen show korbe
   return (
     <div className="min-h-screen bg-[#050814] text-[#e6f1ff] p-6">
       <div className="flex justify-between items-center mb-6 bg-[#0b1329] p-4 rounded-xl border border-slate-800">
@@ -111,9 +115,26 @@ export default function App() {
           লগআউট
         </button>
       </div>
-      <div className="bg-[#0b1329] p-6 rounded-xl border border-slate-800 text-center">
-        <h2 className="text-2xl font-semibold text-green-400 mb-2">সফলভাবে লগইন হয়েছে!</h2>
-        <p className="text-slate-400">আপনার সিস্টেম এখন সম্পূর্ণ প্রস্তুত এবং ফায়ারবেসের সাথে যুক্ত আছে।</p>
+
+      {/* APNAR MAIN PORTAL CODE / COMPONENTS EKANE BOSABEN */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+        <div className="bg-[#0b1329] p-5 rounded-xl border border-slate-800">
+          <h3 className="text-slate-400 text-sm">মোট লেবার</h3>
+          <p className="text-2xl font-bold text-cyan-400 mt-1">০ জন</p>
+        </div>
+        <div className="bg-[#0b1329] p-5 rounded-xl border border-slate-800">
+          <h3 className="text-slate-400 text-sm">আজকের বিল</h3>
+          <p className="text-2xl font-bold text-green-400 mt-1">৳ ০.০০</p>
+        </div>
+        <div className="bg-[#0b1329] p-5 rounded-xl border border-slate-800">
+          <h3 className="text-slate-400 text-sm">বাকি পরিমাণ</h3>
+          <p className="text-2xl font-bold text-amber-400 mt-1">৳ ০.০০</p>
+        </div>
+      </div>
+
+      <div className="bg-[#0b1329] p-6 rounded-xl border border-slate-800">
+        <h2 className="text-lg font-semibold text-slate-200 mb-4">লেবার তালিকা ও এন্ট্রি ফর্ম</h2>
+        <p className="text-slate-400">Apnar ager project er table, form ba baki code gulo ekhane bosie nite paren.</p>
       </div>
     </div>
   );
