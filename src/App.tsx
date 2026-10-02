@@ -18,7 +18,7 @@ import {
   BANGLA_MONTHS,
   parseDate,
 } from './utils/dateHelpers';
-import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X } from 'lucide-react';
+import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X, ArrowLeft } from 'lucide-react';
 import {
   subscribeToWorkers,
   subscribeToRecords,
@@ -31,7 +31,7 @@ import {
   replaceAllCloudData,
 } from './services/cloudService';
 import { auth } from './lib/firebase';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, User as FirebaseUser } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider, sendPasswordResetEmail, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
@@ -41,13 +41,12 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
-  // পাসওয়ার্ড পরিবর্তনের স্টেট
-  const [showPasswordModal, setShowPasswordModal] = useState<boolean>(false);
-  const [currentPassword, setCurrentPassword] = useState<string>('');
-  const [newPassword, setNewPassword] = useState<string>('');
-  const [passwordError, setPasswordError] = useState<string>('');
-  const [passwordSuccess, setPasswordSuccess] = useState<string>('');
-  const [isChangingPassword, setIsChangingPassword] = useState<boolean>(false);
+  // লগইন পেজ থেকে পাসওয়ার্ড রিসেট বা পরিবর্তনের মোড
+  const [authView, setAuthView] = useState<'login' | 'forgot'>('login');
+  const [resetEmail, setResetEmail] = useState<string>('');
+  const [resetMessage, setResetMessage] = useState<string>('');
+  const [resetError, setResetError] = useState<string>('');
+  const [isResetting, setIsResetting] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -80,32 +79,20 @@ export default function App() {
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
+  const handlePasswordReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    setPasswordError('');
-    setPasswordSuccess('');
-    if (!currentUser || !currentUser.email) return;
-
-    setIsChangingPassword(true);
+    setResetError('');
+    setResetMessage('');
+    setIsResetting(true);
     try {
-      // রি-অথেন্টিকেট করা হচ্ছে সিকিউরিটির জন্য
-      const credential = EmailAuthProvider.credential(currentUser.email, currentPassword);
-      await reauthenticateWithCredential(currentUser, credential);
-
-      // নতুন পাসওয়ার্ড আপডেট
-      await updatePassword(currentUser, newPassword);
-      setPasswordSuccess('পাসওয়ার্ড সফলভাবে পরিবর্তন করা হয়েছে!');
-      setCurrentPassword('');
-      setNewPassword('');
-      setTimeout(() => {
-        setShowPasswordModal(false);
-        setPasswordSuccess('');
-      }, 2000);
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setResetMessage('পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইমেইল ইনবক্স চেক করুন।');
+      setResetEmail('');
     } catch (err: any) {
-      console.error('Password change error:', err);
-      setPasswordError('বর্তমান পাসওয়ার্ড সঠিক নয় অথবা সমস্যা হয়েছে। আবার চেষ্টা করুন।');
+      console.error('Reset error:', err);
+      setResetError('ইমেইলটি সঠিক নয় অথবা ফায়ারবেসে রেজিস্টার্ড নয়।');
     } finally {
-      setIsChangingPassword(false);
+      setIsResetting(false);
     }
   };
 
@@ -441,51 +428,118 @@ export default function App() {
             <p className="text-xs text-slate-400 mt-1">মনসুর লেবার পোর্টাল অ্যাক্সেস করতে লগইন করুন</p>
           </div>
 
-          {loginError && (
-            <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center">
-              {loginError}
-            </div>
+          {authView === 'login' ? (
+            <>
+              {loginError && (
+                <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center">
+                  {loginError}
+                </div>
+              )}
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">ইমেইল এড্রেস</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="email"
+                      required
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      placeholder="admin@example.com"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">পাসওয়ার্ড</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="password"
+                      required
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      placeholder="••••••••"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end">
+                  <button
+                    type="button"
+                    onClick={() => { setAuthView('forgot'); setResetError(''); setResetMessage(''); }}
+                    className="text-xs text-[#00f2fe] hover:underline cursor-pointer"
+                  >
+                    পাসওয়ার্ড পরিবর্তন বা ভুলে গেছেন?
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isLoggingIn}
+                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>লগইন করুন</span>}
+                </button>
+              </form>
+            </>
+          ) : (
+            <>
+              <div className="text-center mb-3">
+                <p className="text-xs text-slate-300">আপনার রেজিস্টার্ড ইমেইল দিন, আমরা পাসওয়ার্ড রিসেট বা পরিবর্তনের লিংক পাঠিয়ে দেব।</p>
+              </div>
+
+              {resetError && (
+                <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center">
+                  {resetError}
+                </div>
+              )}
+
+              {resetMessage && (
+                <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs text-center">
+                  {resetMessage}
+                </div>
+              )}
+
+              <form onSubmit={handlePasswordReset} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">ইমেইল এড্রেস</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="email"
+                      required
+                      value={resetEmail}
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      placeholder="admin@example.com"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setAuthView('login')}
+                    className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-white cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" /> লগইন পেজে ফিরে যান
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isResetting}
+                  className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isResetting ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>রিসেট লিংক পাঠান</span>}
+                </button>
+              </form>
+            </>
           )}
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">ইমেইল এড্রেস</label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="email"
-                  required
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  placeholder="admin@example.com"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">পাসওয়ার্ড</label>
-              <div className="relative">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  type="password"
-                  required
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 pl-10 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full mt-2 py-3 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 font-bold text-sm shadow-[0_0_20px_rgba(0,242,254,0.3)] hover:opacity-90 cursor-pointer flex items-center justify-center gap-2"
-            >
-              {isLoggingIn ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>লগইন করুন</span>}
-            </button>
-          </form>
         </div>
       </div>
     );
@@ -504,14 +558,6 @@ export default function App() {
             </div>
             
             <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00f2fe]/10 hover:bg-[#00f2fe]/20 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold cursor-pointer"
-              >
-                <KeyRound className="w-4 h-4" />
-                <span>পাসওয়ার্ড পরিবর্তন</span>
-              </button>
-              
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold cursor-pointer"
@@ -593,81 +639,6 @@ export default function App() {
           onDownloadBackup={handleDownloadBackup}
         />
       </div>
-
-      {/* পাসওয়ার্ড পরিবর্তনের মোডাল */}
-      {showPasswordModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4 bg-black/70 backdrop-blur-sm">
-          <div className="relative max-w-md w-full bg-slate-900 border border-[#00f2fe]/30 rounded-2xl p-6 sm:p-8 shadow-[0_0_40px_rgba(0,242,254,0.2)]">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-orbitron text-lg font-bold text-[#00f2fe] flex items-center gap-2">
-                <KeyRound className="w-5 h-5" /> পাসওয়ার্ড পরিবর্তন
-              </h3>
-              <button 
-                onClick={() => setShowPasswordModal(false)}
-                className="text-slate-400 hover:text-white cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {passwordError && (
-              <div className="mb-4 p-3 rounded-xl bg-red-500/15 border border-red-500/40 text-red-300 text-xs text-center">
-                {passwordError}
-              </div>
-            )}
-
-            {passwordSuccess && (
-              <div className="mb-4 p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs text-center">
-                {passwordSuccess}
-              </div>
-            )}
-
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">বর্তমান পাসওয়ার্ড</label>
-                <input
-                  type="password"
-                  required
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1.5">নতুন পাসওয়ার্ড (কমপক্ষে ৬ ডিজিট)</label>
-                <input
-                  type="password"
-                  required
-                  minLength={6}
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00f2fe]"
-                />
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowPasswordModal(false)}
-                  className="w-1/2 py-2.5 rounded-xl bg-white/5 border border-white/10 text-slate-300 text-xs font-bold hover:bg-white/10 cursor-pointer"
-                >
-                  বাতিল
-                </button>
-                <button
-                  type="submit"
-                  disabled={isChangingPassword}
-                  className="w-1/2 py-2.5 rounded-xl bg-gradient-to-r from-[#00f2fe] to-[#4facfe] text-slate-950 text-xs font-bold shadow-[0_0_15px_rgba(0,242,254,0.3)] hover:opacity-90 cursor-pointer flex items-center justify-center gap-2"
-                >
-                  {isChangingPassword ? <Loader2 className="w-4 h-4 animate-spin" /> : <span>পরিবর্তন করুন</span>}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {(activeDetailSummary || activeDetailWorker) && (
         <WorkerDetailModal
