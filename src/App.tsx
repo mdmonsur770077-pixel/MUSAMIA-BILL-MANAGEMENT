@@ -18,7 +18,7 @@ import {
   BANGLA_MONTHS,
   parseDate,
 } from './utils/dateHelpers';
-import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X, ArrowLeft } from 'lucide-react';
+import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X, ArrowLeft, Box } from 'lucide-react';
 import {
   subscribeToWorkers,
   subscribeToRecords,
@@ -41,7 +41,7 @@ export default function App() {
   const [loginError, setLoginError] = useState<string>('');
   const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
 
-  // লগইন পেজ থেকে পাসওয়ার্ড রিসেট বা পরিবর্তনের মোড
+  // লগইন পেজ থেকে পাসওয়ার্ড রিসেট বা পরিবর্তনের মোড
   const [authView, setAuthView] = useState<'login' | 'forgot'>('login');
   const [resetEmail, setResetEmail] = useState<string>('');
   const [resetMessage, setResetMessage] = useState<string>('');
@@ -65,7 +65,7 @@ export default function App() {
       setLoginPassword('');
     } catch (err: any) {
       console.error('Login error:', err);
-      setLoginError('লগইন ব্যর্থ হয়েছে! ইমেইল বা পাসওয়ার্ড চেক করুন।');
+      setLoginError('লগইন ব্যর্থ হয়েছে! ইমেইল বা পাসওয়ার্ড চেক করুন।');
     } finally {
       setIsLoggingIn(false);
     }
@@ -86,11 +86,11 @@ export default function App() {
     setIsResetting(true);
     try {
       await sendPasswordResetEmail(auth, resetEmail.trim());
-      setResetMessage('পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইমেইল ইনবক্স চেক করুন।');
+      setResetMessage('পাসওয়ার্ড রিসেট লিংক আপনার ইমেইলে পাঠানো হয়েছে। ইমেইল ইনবক্স চেক করুন।');
       setResetEmail('');
     } catch (err: any) {
       console.error('Reset error:', err);
-      setResetError('ইমেইলটি সঠিক নয় অথবা ফায়ারবেসে রেজিস্টার্ড নয়।');
+      setResetError('ইমেইলটি সঠিক নয় অথবা ফায়ারবেসে রেজিস্টার্ড নয়।');
     } finally {
       setIsResetting(false);
     }
@@ -325,7 +325,7 @@ export default function App() {
   };
 
   const handleResetData = () => {
-    if (window.confirm('আপনি কি ডেমো ডেটায় ফিরে যেতে চান?')) {
+    if (window.confirm('আপনি কি ডেমো ডেটায় ফিরে যেতে চান?')) {
       setWorkers(INITIAL_WORKERS);
       setRecords(INITIAL_RECORDS);
       localStorage.removeItem('nexus_workers');
@@ -388,10 +388,10 @@ export default function App() {
           setWorkers(data.workers);
           setRecords(data.records);
           replaceAllCloudData(data.workers, data.records);
-          alert('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!');
+          alert('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!');
         }
       } catch (err) {
-        alert('ব্যাকআপ ফাইল পড়তে সমস্যা হয়েছে।');
+        alert('ব্যাকআপ ফাইল পড়তে সমস্যা হয়েছে।');
       }
     };
     reader.readAsText(file);
@@ -453,7 +453,7 @@ export default function App() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">পাসওয়ার্ড</label>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1.5">পাসওয়ার্ড</label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
@@ -473,7 +473,7 @@ export default function App() {
                     onClick={() => { setAuthView('forgot'); setResetError(''); setResetMessage(''); }}
                     className="text-xs text-[#00f2fe] hover:underline cursor-pointer"
                   >
-                    পাসওয়ার্ড পরিবর্তন বা ভুলে গেছেন?
+                    পাসওয়ার্ড পরিবর্তন বা ভুলে গেছেন?
                   </button>
                 </div>
 
@@ -489,7 +489,7 @@ export default function App() {
           ) : (
             <>
               <div className="text-center mb-3">
-                <p className="text-xs text-slate-300">আপনার রেজিস্টার্ড ইমেইল দিন, আমরা পাসওয়ার্ড রিসেট বা পরিবর্তনের লিংক পাঠিয়ে দেব।</p>
+                <p className="text-xs text-slate-300">আপনার রেজিস্টার্ড ইমেইল দিন, আমরা পাসওয়ার্ড রিসেট বা পরিবর্তনের লিংক পাঠিয়ে দেব।</p>
               </div>
 
               {resetError && (
@@ -551,13 +551,26 @@ export default function App() {
 
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
-          <div className="flex items-center justify-between mb-3 no-print">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
-              <Mail className="w-4 h-4" />
-              <span>{currentUser.email}</span>
+          {/* Top Bar with Email, 3D Blueprint in exact middle, and Logout */}
+          <div className="grid grid-cols-3 items-center mb-3 no-print w-full">
+            <div className="flex items-center justify-start">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
+                <Mail className="w-4 h-4" />
+                <span className="truncate max-w-[150px] sm:max-w-none">{currentUser.email}</span>
+              </div>
             </div>
-            
-            <div className="flex items-center gap-2">
+
+            <div className="flex items-center justify-center">
+              <button
+                onClick={() => setShowRoadmapModal(true)}
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-[0_0_15px_rgba(0,242,254,0.2)] cursor-pointer transition-all"
+              >
+                <Box className="w-4 h-4" />
+                <span>3D Blueprint</span>
+              </button>
+            </div>
+
+            <div className="flex items-center justify-end">
               <button
                 onClick={handleLogout}
                 className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 text-red-300 text-xs font-semibold cursor-pointer"
@@ -577,7 +590,7 @@ export default function App() {
               cloudSyncStatus === 'connected' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'
             }`}>
               <Cloud className="w-4 h-4" />
-              <span>{cloudSyncStatus === 'connected' ? 'ক্লাউড সিঙ্ক সক্রিয়' : 'অফলাইন মোড'}</span>
+              <span>{cloudSyncStatus === 'connected' ? 'ক্লাউড সিঙ্ক সক্রিয়' : 'অফলাইন মোড'}</span>
             </div>
 
             <button onClick={handleDownloadBackup} className="px-3 py-1.5 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 cursor-pointer">
@@ -656,6 +669,10 @@ export default function App() {
 
       {activeEditWorker && (
         <EditWorkerModal worker={activeEditWorker} onClose={() => setActiveEditWorkerId(null)} onSave={handleUpdateWorker} />
+      )}
+
+      {showRoadmapModal && (
+        <FutureRoadmapModal onClose={() => setShowRoadmapModal(false)} />
       )}
     </div>
   );
