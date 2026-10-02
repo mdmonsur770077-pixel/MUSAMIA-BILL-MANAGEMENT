@@ -32,6 +32,20 @@ import {
 } from './services/cloudService';
 import { auth } from './lib/firebase';
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, Mail, Loader2 } from 'lucide-react';
+import {
+  subscribeToWorkers,
+  subscribeToRecords,
+  saveWorkerToCloud,
+  deleteWorkerFromCloud,
+  saveRecordToCloud,
+  updateRecordInCloud,
+  deleteRecordFromCloud,
+  migrateLocalDataToCloudIfEmpty,
+  replaceAllCloudData,
+} from './services/cloudService';
+import { auth } from './lib/firebase';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
