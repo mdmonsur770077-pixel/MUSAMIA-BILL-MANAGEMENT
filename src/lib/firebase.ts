@@ -2,8 +2,8 @@
 import { initializeApp } from "firebase/app";
 import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyDvFOGEdOj47IwFPR0BRg5W_qudC5GNOwU",
   authDomain: "musamia-bill-management.firebaseapp.com",
@@ -14,9 +14,9 @@ const firebaseConfig = {
   measurementId: "G-VWCYBZP3C0"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const analytics = getAnalytics(app);
 
-// Authentication export
+// Ekhane auth ebong db duitai export korte hobe
 export const auth = getAuth(app);
+export const db = getFirestore(app);
