@@ -550,7 +550,7 @@ export default function App() {
 
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
-          {/* Top Bar: Left (Email), Center (3D Blueprint), Right (Logout) */}
+          {/* Top Bar: Left (Email), Center (3D Blueprint), Right (Logout) - ONLY ONE 3D BLUEPRINT NOW */}
           <div className="grid grid-cols-3 items-center mb-3 no-print w-full">
             <div className="flex items-center justify-start">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
@@ -644,7 +644,7 @@ export default function App() {
           periodLabel={periodLabel}
           onDeleteWorker={handleDeleteWorker}
           onOpenWorkerDetails={setActiveDetailWorkerId}
-          onQuickAddRecord={(id) => { setQuickEntryWorkerId(id); window.scrollTo({ top: 460, background: 'smooth' }); }}
+          onQuickAddRecord={(id) => { setQuickEntryWorkerId(id); window.scrollTo({ top: 460, behavior: 'smooth' }); }}
           onEditWorker={setActiveEditWorkerId}
           onExportCsv={handleExportCsv}
           onPrintLedger={handlePrintLedger}
