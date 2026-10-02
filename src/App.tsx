@@ -551,23 +551,13 @@ export default function App() {
 
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
-          {/* Top Bar with Email, 3D Blueprint in exact middle, and Logout */}
-          <div className="grid grid-cols-3 items-center mb-3 no-print w-full">
+          {/* Top Bar with Email and Logout properly spaced */}
+          <div className="flex items-center justify-between mb-3 no-print w-full">
             <div className="flex items-center justify-start">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
                 <Mail className="w-4 h-4" />
-                <span className="truncate max-w-[150px] sm:max-w-none">{currentUser.email}</span>
+                <span className="truncate max-w-[180px] sm:max-w-none">{currentUser.email}</span>
               </div>
-            </div>
-
-            <div className="flex items-center justify-center">
-              <button
-                onClick={() => setShowRoadmapModal(true)}
-                className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-[0_0_15px_rgba(0,242,254,0.2)] cursor-pointer transition-all"
-              >
-                <Box className="w-4 h-4" />
-                <span>3D Blueprint</span>
-              </button>
             </div>
 
             <div className="flex items-center justify-end">
