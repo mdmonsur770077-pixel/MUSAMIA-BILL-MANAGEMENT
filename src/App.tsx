@@ -286,21 +286,23 @@ export default function App() {
   };
 
   const handleAddRecord = (recordData: Omit<WorkRecord, 'id' | 'createdAt'>) => {
-    const targetWorker = workers.find((w) => w.id === recordData.workerId) || (workers.length > 0 ? workers[0] : null);
+    const targetWorker = workers.find((w) => w.id === recordData.workerId);
     if (!targetWorker) {
-      alert('কোনো লেবার পাওয়া যায়নি। অনুগ্রহ করে আগে একজন লেবার যুক্ত করুন।');
+      alert('অনুগ্রহ করে সঠিক লেবার সিলেক্ট করুন।');
       return;
     }
 
-    const safeWorkerId = targetWorker.id;
     const newRecord: WorkRecord = {
       ...recordData,
-      workerId: safeWorkerId,
+      workerId: targetWorker.id,
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
 
     setRecords((prev) => [newRecord, ...prev]);
+
+    // Clear worker selection after successful entry so user must re-select for next entry
+    setQuickEntryWorkerId(null);
 
     const { year: recordYear, monthIndex: recordMonth } = parseDate(recordData.date);
     if (selectedYear !== 'all' && selectedYear !== recordYear) {
@@ -644,7 +646,7 @@ export default function App() {
           periodLabel={periodLabel}
           onDeleteWorker={handleDeleteWorker}
           onOpenWorkerDetails={setActiveDetailWorkerId}
-          onQuickAddRecord={(id) => { setQuickEntryWorkerId(id); window.scrollTo({ top: 460, background: 'smooth' }); }}
+          onQuickAddRecord={(id) => { setQuickEntryWorkerId(id); window.scrollTo({ top: 460, behavior: 'smooth' }); }}
           onEditWorker={setActiveEditWorkerId}
           onExportCsv={handleExportCsv}
           onPrintLedger={handlePrintLedger}
