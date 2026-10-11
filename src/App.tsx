@@ -18,7 +18,7 @@ import {
   BANGLA_MONTHS,
   parseDate,
 } from './utils/dateHelpers';
-import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X, ArrowLeft, Box } from 'lucide-react';
+import { ShieldCheck, RotateCcw, Clock, Lightbulb, Cloud, Smartphone, Laptop, LogOut, Lock, KeyRound, Mail, Loader2, X, ArrowLeft, Box, Trash2, RefreshCw } from 'lucide-react';
 import {
   subscribeToWorkers,
   subscribeToRecords,
@@ -46,6 +46,21 @@ export default function App() {
   const [resetMessage, setResetMessage] = useState<string>('');
   const [resetError, setResetError] = useState<string>('');
   const [isResetting, setIsResetting] = useState<boolean>(false);
+
+  // Recycle Bin States
+  const [trashWorkers, setTrashWorkers] = useState<Worker[]>(() => {
+    try {
+      const saved = localStorage.getItem('nexus_trash_workers');
+      if (saved !== null) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error('Failed to parse trash workers', e);
+    }
+    return [];
+  });
+  const [showTrashModal, setShowTrashModal] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -202,6 +217,14 @@ export default function App() {
     }
   }, [records]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('nexus_trash_workers', JSON.stringify(trashWorkers));
+    } catch (e) {
+      console.error('Error saving trash workers', e);
+    }
+  }, [trashWorkers]);
+
   const [activeDetailWorkerId, setActiveDetailWorkerId] = useState<string | null>(null);
   const [activeEditWorkerId, setActiveEditWorkerId] = useState<string | null>(null);
   const [quickEntryWorkerId, setQuickEntryWorkerId] = useState<string | null>(null);
@@ -274,14 +297,30 @@ export default function App() {
 
   const handleDeleteWorker = (workerId: string) => {
     const worker = workers.find((w) => w.id === workerId);
-    const workerName = worker ? worker.name : 'এই লেবার';
-    if (window.confirm(`আপনি কি নিশ্চিত "${workerName}"-এর সমস্ত তথ্য মুছে ফেলতে চান?`)) {
+    if (!worker) return;
+    const workerName = worker.name;
+    if (window.confirm(`আপনি কি "${workerName}"-কে রিসাইকেল বিন-এ পাঠাতে চান?`)) {
       setWorkers((prev) => prev.filter((w) => w.id !== workerId));
-      setRecords((prev) => prev.filter((r) => r.workerId !== workerId));
+      setTrashWorkers((prev) => [worker, ...prev]);
       if (activeDetailWorkerId === workerId) setActiveDetailWorkerId(null);
       if (activeEditWorkerId === workerId) setActiveEditWorkerId(null);
       if (quickEntryWorkerId === workerId) setQuickEntryWorkerId(null);
       deleteWorkerFromCloud(workerId).catch((err) => console.error(err));
+    }
+  };
+
+  const handleRestoreWorker = (workerId: string) => {
+    const worker = trashWorkers.find((w) => w.id === workerId);
+    if (!worker) return;
+    setTrashWorkers((prev) => prev.filter((w) => w.id !== workerId));
+    setWorkers((prev) => [worker, ...prev]);
+    saveWorkerToCloud(worker).catch((err) => console.error(err));
+  };
+
+  const handlePermanentDeleteWorker = (workerId: string) => {
+    if (window.confirm('আপনি কি নিশ্চিতভাবে এই লেবার এবং তার সমস্ত রেকর্ড চিরতরে মুছে ফেলতে চান? এটি আর ফিরিয়ে আনা যাবে না।')) {
+      setTrashWorkers((prev) => prev.filter((w) => w.id !== workerId));
+      setRecords((prev) => prev.filter((r) => r.workerId !== workerId));
     }
   };
 
@@ -300,8 +339,6 @@ export default function App() {
     };
 
     setRecords((prev) => [newRecord, ...prev]);
-
-    // Clear worker selection after successful entry so user must re-select for next entry
     setQuickEntryWorkerId(null);
 
     const { year: recordYear, monthIndex: recordMonth } = parseDate(recordData.date);
@@ -329,8 +366,10 @@ export default function App() {
     if (window.confirm('আপনি কি ডেমো ডেটায় ফিরে যেতে চান?')) {
       setWorkers(INITIAL_WORKERS);
       setRecords(INITIAL_RECORDS);
+      setTrashWorkers([]);
       localStorage.removeItem('nexus_workers');
       localStorage.removeItem('nexus_records');
+      localStorage.removeItem('nexus_trash_workers');
       replaceAllCloudData(INITIAL_WORKERS, INITIAL_RECORDS).catch((err) => console.error(err));
     }
   };
@@ -368,7 +407,7 @@ export default function App() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDownloadBackup = () => {
-    const backupData = { workers, records };
+    const backupData = { workers, records, trashWorkers };
     const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -388,6 +427,7 @@ export default function App() {
         if (data.workers && data.records) {
           setWorkers(data.workers);
           setRecords(data.records);
+          if (data.trashWorkers) setTrashWorkers(data.trashWorkers);
           replaceAllCloudData(data.workers, data.records);
           alert('ব্যাকআপ সফলভাবে রিস্টোর হয়েছে!');
         }
@@ -404,7 +444,7 @@ export default function App() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0d1117] text-[#00f2fe]">
+      <div className="min-h-screen flex items-center justify-center bg-[#0d1117] text-[#00f2fe]" style={{ fontFamily: 'Kalpurush, SolaimanLipi, sans-serif' }}>
         <ThreeBackground />
         <div className="relative z-10 flex flex-col items-center gap-3">
           <Loader2 className="w-10 h-10 animate-spin text-[#00f2fe]" />
@@ -416,9 +456,9 @@ export default function App() {
 
   if (!currentUser) {
     return (
-      <div className="relative min-h-screen flex items-center justify-center px-4 text-[#e6f1ff]">
+      <div className="relative min-h-screen flex items-center justify-center px-4 text-[#e6f1ff]" style={{ fontFamily: 'Kalpurush, SolaimanLipi, sans-serif' }}>
         <ThreeBackground />
-        <div className="relative z-10 max-w-md w-full bg-slate-900/80 backdrop-blur-xl border border-[#00f2fe]/30 rounded-2xl p-6 sm:p-8 shadow-[0_0_40px_rgba(0,242,254,0.15)]">
+        <div className="relative z-10 max-w-md w-full bg-slate-900/85 backdrop-blur-xl border border-[#00f2fe]/30 rounded-2xl p-6 sm:p-8 shadow-[0_0_40px_rgba(0,242,254,0.15)]">
           <div className="text-center mb-6">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] mb-3">
               <Lock className="w-6 h-6" />
@@ -547,12 +587,11 @@ export default function App() {
   }
 
   return (
-    <div className="relative min-h-screen text-[#e6f1ff] pb-16">
+    <div className="relative min-h-screen text-[#e6f1ff] pb-16" style={{ fontFamily: 'Kalpurush, SolaimanLipi, sans-serif' }}>
       <ThreeBackground />
 
       <div className="max-w-[1340px] mx-auto px-4 sm:px-6 pt-7 relative z-10">
         <header className="text-center mb-6 px-2">
-          {/* Top Bar: Left (Email), Center (3D Blueprint), Right (Logout) */}
           <div className="grid grid-cols-3 items-center mb-3 no-print w-full">
             <div className="flex items-center justify-start">
               <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#00f2fe]/10 border border-[#00f2fe]/30 text-[#00f2fe] text-xs font-semibold">
@@ -561,13 +600,27 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex items-center justify-center">
+            <div className="flex items-center justify-center gap-2">
               <button
                 onClick={() => setShowRoadmapModal(true)}
                 className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/40 text-cyan-300 text-xs font-semibold shadow-[0_0_15px_rgba(0,242,254,0.2)] cursor-pointer transition-all"
               >
                 <Box className="w-4 h-4" />
                 <span>3D Blueprint</span>
+              </button>
+
+              <button
+                onClick={() => setShowTrashModal(true)}
+                className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-semibold cursor-pointer"
+                title="রিসাইকেল বিন"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>রিসাইকেল বিন</span>
+                {trashWorkers.length > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                    {trashWorkers.length}
+                  </span>
+                )}
               </button>
             </div>
 
@@ -653,6 +706,65 @@ export default function App() {
           onDownloadBackup={handleDownloadBackup}
         />
       </div>
+
+      {/* Recycle Bin Modal */}
+      {showTrashModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md">
+          <div className="bg-slate-900 border border-amber-500/40 rounded-2xl max-w-lg w-full p-6 shadow-[0_0_30px_rgba(245,158,11,0.2)]">
+            <div className="flex items-center justify-between mb-4 border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-amber-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="text-lg font-bold">রিসাইকেল বিন (লেবার তালিকা)</h3>
+              </div>
+              <button onClick={() => setShowTrashModal(false)} className="text-slate-400 hover:text-white cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {trashWorkers.length === 0 ? (
+              <div className="text-center py-8 text-slate-400 text-sm">
+                রিসাইকেল বিন খালি রয়েছে। কোনো ডিলিট করা লেবার নেই।
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-1">
+                {trashWorkers.map((worker) => (
+                  <div key={worker.id} className="flex items-center justify-between p-3.5 bg-black/40 border border-white/10 rounded-xl">
+                    <div>
+                      <h4 className="font-semibold text-white text-sm">{worker.name}</h4>
+                      <p className="text-xs text-slate-400">{worker.trade || 'পদবী উল্লেখ নেই'} • দৈনিক মজুরি: ৳{worker.dailyWage}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleRestoreWorker(worker.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-semibold cursor-pointer"
+                        title="রিস্টোর করুন"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> রিস্টোর
+                      </button>
+                      <button
+                        onClick={() => handlePermanentDeleteWorker(worker.id)}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 text-red-300 text-xs font-semibold cursor-pointer"
+                        title="চিরতরে ডিলিট"
+                      >
+                        <X className="w-3.5 h-3.5" /> ডিলিট
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={() => setShowTrashModal(false)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-semibold cursor-pointer"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(activeDetailSummary || activeDetailWorker) && (
         <WorkerDetailModal
